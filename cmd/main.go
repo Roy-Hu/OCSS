@@ -26,7 +26,7 @@ import (
 	"github.com/comp590/ocss/pkg/service"
 )
 
-var OCSS *service.OCSSApp
+var OCSS *service.SystemApp
 
 func main() {
 	defer func() {
@@ -47,7 +47,7 @@ func main() {
 		},
 		cli.StringSliceFlag{
 			Name:  "log, l",
-			Usage: "Output NF log to `FILE`",
+			Usage: "Output log to `FILE`",
 		},
 	}
 	if err := app.Run(os.Args); err != nil {
@@ -72,7 +72,7 @@ func action(cliCtx *cli.Context) error {
 		sigCh <- nil
 		return err
 	}
-	factory.ChfConfig = cfg
+	factory.OcssConfig = cfg
 
 	ocss, err := service.NewApp(ctx, cfg, logPath)
 	if err != nil {

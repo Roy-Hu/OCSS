@@ -16,58 +16,70 @@ import (
 	"github.com/comp590/ocss/pkg/factory"
 )
 
-var OCSS *OCSSApp
+var SYSTEM *SystemApp
 
-var _ app.App = &OCSSApp{}
+var _ app.App = &SystemApp{}
 
-type OCSSApp struct {
+type SystemApp struct {
 	ocssCtx *ocss_context.OCSSContext
 	cfg     *factory.Config
-
-	ocssServer *ocss.Server
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	state     *ocss.Server
+	processor *ocss.Processor
+	rdc       *ocss.Rdc
 }
 
-func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*OCSSApp, error) {
-	var err error
-
-	ocssApp := &OCSSApp{
+func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*SystemApp, error) {
+	sys := &SystemApp{
 		cfg: cfg,
 		wg:  sync.WaitGroup{},
 	}
-	ocssApp.SetLogEnable(cfg.GetLogEnable())
-	ocssApp.SetLogLevel(cfg.GetLogLevel())
-	ocssApp.SetReportCaller(cfg.GetLogReportCaller())
-	ocss_context.Init(cfg.Configuration)
+	sys.SetLogEnable(cfg.GetLogEnable())
+	sys.SetLogLevel(cfg.GetLogLevel())
+	sys.SetReportCaller(cfg.GetLogReportCaller())
+	ocss_context.Init()
 
-	ocssApp.ctx, ocssApp.cancel = context.WithCancel(ctx)
-	ocssApp.ocssCtx = ocss_context.GetSelf()
+	sys.ctx, sys.cancel = context.WithCancel(ctx)
+	sys.ocssCtx = ocss_context.GetSelf()
 
-	if ocssApp.ocssServer, err = ocss.NewServer(ocssApp); err != nil {
+	rdc, err := ocss.NewRdc(sys)
+	if err != nil {
+		return sys, err
+	}
+	sys.rdc = rdc
+
+	processor, err := ocss.NewProcessor(sys)
+	if err != nil {
+		return sys, err
+	}
+	sys.processor = processor
+
+	if sys.state, err = ocss.NewServer(sys); err != nil {
 		return nil, err
 	}
 
-	OCSS = ocssApp
+	SYSTEM = sys
 
-	return ocssApp, nil
+	return sys, nil
 }
 
-func (a *OCSSApp) CancelContext() context.Context {
+func (a *SystemApp) CancelContext() context.Context {
 	return a.ctx
 }
 
-func (a *OCSSApp) Context() *ocss_context.OCSSContext {
+func (a *SystemApp) Context() *ocss_context.OCSSContext {
 	return a.ocssCtx
 }
 
-func (a *OCSSApp) Config() *factory.Config {
+func (a *SystemApp) Config() *factory.Config {
 	return a.cfg
 }
 
-func (c *OCSSApp) SetLogEnable(enable bool) {
+func (c *SystemApp) SetLogEnable(enable bool) {
 	logger.MainLog.Infof("Log enable is set to [%v]", enable)
 	if enable && logger.Log.Out == os.Stderr {
 		return
@@ -84,7 +96,7 @@ func (c *OCSSApp) SetLogEnable(enable bool) {
 	}
 }
 
-func (c *OCSSApp) SetLogLevel(level string) {
+func (c *SystemApp) SetLogLevel(level string) {
 	lvl, err := logrus.ParseLevel(level)
 	if err != nil {
 		logger.MainLog.Warnf("Log level [%s] is invalid", level)
@@ -100,7 +112,7 @@ func (c *OCSSApp) SetLogLevel(level string) {
 	logger.Log.SetLevel(lvl)
 }
 
-func (c *OCSSApp) SetReportCaller(reportCaller bool) {
+func (c *SystemApp) SetReportCaller(reportCaller bool) {
 	logger.MainLog.Infof("Report Caller is set to [%v]", reportCaller)
 	if reportCaller == logger.Log.ReportCaller {
 		return
@@ -109,18 +121,18 @@ func (c *OCSSApp) SetReportCaller(reportCaller bool) {
 	logger.Log.SetReportCaller(reportCaller)
 }
 
-func (a *OCSSApp) Start() {
+func (a *SystemApp) Start() {
 	logger.InitLog.Infoln("Server started")
 
 	a.wg.Add(1)
 	go a.listenShutdownEvent()
 
-	if err := a.ocssServer.Run(context.Background(), &a.wg); err != nil {
+	if err := a.state.Run(context.Background(), &a.wg); err != nil {
 		logger.MainLog.Fatalf("Run OCSS server failed: %+v", err)
 	}
 }
 
-func (a *OCSSApp) listenShutdownEvent() {
+func (a *SystemApp) listenShutdownEvent() {
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
@@ -133,17 +145,25 @@ func (a *OCSSApp) listenShutdownEvent() {
 	a.terminateProcedure()
 }
 
-func (c *OCSSApp) Terminate() {
+func (c *SystemApp) Terminate() {
 	c.cancel()
 }
 
-func (c *OCSSApp) terminateProcedure() {
+func (c *SystemApp) terminateProcedure() {
 	logger.MainLog.Infof("Terminating ocss...")
 	c.CallServerStop()
 }
 
-func (a *OCSSApp) CallServerStop() {
-	if a.ocssServer != nil {
-		a.ocssServer.Stop()
+func (a *SystemApp) CallServerStop() {
+	if a.state != nil {
+		a.state.Stop()
 	}
+}
+
+func (a *SystemApp) Processor() *ocss.Processor {
+	return a.processor
+}
+
+func (a *SystemApp) Rdc() *ocss.Rdc {
+	return a.rdc
 }

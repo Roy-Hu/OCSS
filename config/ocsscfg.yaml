@@ -1,6 +1,69 @@
+ocssName: "ocss" # OCSS name
 configuration:
-  ocssName: "ocss" # ocss name
-logger: # log output setting
+  networkManager: 
+    packetSwitchs:
+      - name: "switch1"
+        id: 1
+        ports: "1,17,25,35"
+      - name: "switch2"
+        id: 2
+        ports: "5,21,29,33"
+    opticalSwitchs:
+      - name: "ocs"
+        ports: "1,69,9,31,37,65,31"
+    servers:
+      - name: "server1"
+        ip: "192.168.50.111"
+        port: 111
+      - name: "server2"
+        ip: "192.168.50.147"
+        port: 147
+    links:
+      - source: "server1"
+        destination: "switch1"
+        sourcePorts: [111]
+        destinationPorts: [1]
+      - source: "switch1"
+        destination: "ocs"
+        sourcePorts: [17,25,35]
+        destinationPorts: [1,69,9]
+      - source: "switch2"
+        destination: "ocs"
+        sourcePorts: [33,29,21]
+        destinationPorts: [31,65,37]
+      - source: "switch2"
+        destination: "server2"
+        sourcePorts: [5]
+        destinationPorts: [147]
+  user:
+    link:
+      - source: "server1"
+        destination: "ocs_edge"
+        sourcePorts: [111]
+        destinationPorts: [1]
+      - source: "server2"
+        destination: "ocs_edge"
+        sourcePorts: [147]
+        destinationPorts: [37]
+    tor:
+      - name: "switch1"
+        tors:
+          - name: "tor1"
+            ports: [25, 35]
+      - name: "switch2"
+        tors:
+          - name: "tor2"
+            ports: [29, 33]
+    ocs:
+      - name: "ocs"
+        sections:
+          - name: "ocs_edge"
+            sourcePorts: [1,37]
+            destinationPorts: [69,65]
+          - name: "ocs_core"
+            sourcePorts: [9]
+            destinationPorts: [31]
+logger: # Log output settings
   enable: true # true or false
-  level: info # how detailed to output, value: trace, debug, info, warn, error, fatal, panic
-  reportCaller: false # enable the caller report or not, value: true or false
+  level: "debug" # Trace levels: trace, debug, info, warn, error, fatal, panic
+  reportCaller: false # Enable the caller report: true or false

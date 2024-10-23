@@ -10,7 +10,7 @@ import (
 	"github.com/comp590/ocss/internal/logger"
 )
 
-var ChfConfig *Config
+var OcssConfig *Config
 
 // TODO: Support configuration update from REST api
 func InitConfigFactory(f string, cfg *Config) error {

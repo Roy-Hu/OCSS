@@ -1,0 +1,162 @@
+package ocss
+
+import (
+	ocss_context "github.com/comp590/ocss/internal/context"
+	"github.com/comp590/ocss/internal/logger"
+	"github.com/comp590/ocss/pkg/app"
+)
+
+type ProcessorOCSS interface {
+	app.App
+
+	Rdc() *Rdc
+}
+
+type Processor struct {
+	ProcessorOCSS
+}
+
+func NewProcessor(ocss ProcessorOCSS) (*Processor, error) {
+	o := &Processor{
+		ProcessorOCSS: ocss,
+	}
+
+	return o, nil
+}
+
+func (p *Processor) SetupForwardingTables() error {
+	self := ocss_context.GetSelf()
+	ocs_finished_setup := make(map[string]bool)
+
+	for _, ocs := range self.UserView.OCSs {
+		for ocs_port, connTo := range ocs.Ports {
+			logger.ProcessorLog.Infof("OCS [%s] Port [%d] -> [%s] Port [%d]", ocs.Name, ocs_port, connTo.Device, connTo.Port)
+
+			if self.DeviceType[connTo.Device] == ocss_context.SERVER {
+				// TODO: Support two or more switch between ocs and server
+				device := self.Servers[connTo.Device].Ports[connTo.Port].Device
+				in_port := self.Servers[connTo.Device].Ports[connTo.Port].Port
+
+				switch self.DeviceType[device] {
+				// TODO: Support optical switch
+				case ocss_context.SWITCH:
+					for port, dst := range self.Switches[device].Ports {
+						logger.ProcessorLog.Infof("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, port, dst.Device, dst.Port)
+						if dst.Device == ocs.Device && dst.Port == ocs_port {
+							logger.ProcessorLog.Warnf("OCS [%s] Port [%d] -> Switch [%s] Port [%d]", ocs.Name, ocs_port, device, port)
+							out_port := port
+
+							self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
+								Device:   device,
+								SrcPort:  in_port,
+								DestPort: out_port,
+							})
+
+							dst.Server = append(dst.Server, connTo.Device)
+
+							for i := range len(ocs.Conn.In_port) {
+								if ocs.Conn.In_port[i] == ocs_port {
+									out := ocs.Conn.Out_port[i]
+									self.OCSs[ocs.Device].Ports[out].Server = append(self.OCSs[ocs.Device].Ports[out].Server, connTo.Device)
+
+									// TODO: What about ocs is connected to another ocs?
+									if self.DeviceType[ocs.Ports[out].Device] == ocss_context.SWITCH {
+										self.Switches[ocs.Ports[out].Device].Ports[ocs.Ports[out].Port].Server = append(self.Switches[ocs.Ports[out].Device].Ports[ocs.Ports[out].Port].Server, connTo.Device)
+									}
+								} else if ocs.Conn.Out_port[i] == ocs_port {
+									in := ocs.Conn.In_port[i]
+									self.OCSs[ocs.Device].Ports[in].Server = append(self.OCSs[ocs.Device].Ports[in].Server, connTo.Device)
+
+									if self.DeviceType[ocs.Ports[in].Device] == ocss_context.SWITCH {
+										self.Switches[ocs.Ports[in].Device].Ports[ocs.Ports[in].Port].Server = append(self.Switches[ocs.Ports[in].Device].Ports[ocs.Ports[in].Port].Server, connTo.Device)
+									}
+								}
+							}
+							continue
+						}
+					}
+				}
+
+				ocs_finished_setup[ocs.Name] = true
+			}
+		}
+	}
+
+	for _, ocs := range self.UserView.OCSs {
+		if !ocs_finished_setup[ocs.Name] {
+			for i := range len(ocs.Conn.In_port) {
+				inPort := ocs.Conn.In_port[i]
+				outPort := ocs.Conn.Out_port[i]
+				ports := []*ocss_context.ConnectedTo{ocs.Ports[inPort], ocs.Ports[outPort]}
+				for _, connTo := range ports {
+					port := connTo.Port
+					device := connTo.Device
+					// TODO: What if OCS connected to another OCS?
+					if self.DeviceType[device] == ocss_context.SWITCH {
+						tor := self.UserView.FindToRByDeviceAndPort(device, port)
+						for dst_port, dst_connTo := range tor.Ports {
+							if dst_port == port {
+								continue
+							}
+
+							if ocs.HavePort(dst_port) {
+								logger.ProcessorLog.Debugf("Switch [%s] Port [%d] and Port [%d] both connect to OCS [%s], skip ", connTo.Device, dst_port, port, ocs.Device)
+								continue
+							}
+
+							for _, server := range dst_connTo.Server {
+								self.Switches[device].Ports[port].Server = append(self.Switches[device].Ports[port].Server, server)
+								connTo.Server = append(connTo.Server, server)
+								self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
+									Device:   device,
+									SrcPort:  port,
+									DestPort: dst_port,
+									Ip:       self.Servers[server].Ip,
+								})
+								logger.ProcessorLog.Warnf("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, port, server, dst_port)
+							}
+						}
+					}
+				}
+
+				ports = []*ocss_context.ConnectedTo{ocs.Ports[inPort], ocs.Ports[outPort]}
+				serverLen := []int{len(ports[0].Server), len(ports[1].Server)}
+				for i, connTo := range ports {
+					port := ports[1-i].Port
+					device := ports[1-i].Device
+					servers := ports[i].Server
+					// TODO: What if OCS connected to another OCS?
+					if self.DeviceType[device] == ocss_context.SWITCH {
+						tor := self.UserView.FindToRByDeviceAndPort(device, port)
+						for dst_port, _ := range tor.Ports {
+							if dst_port == port {
+								continue
+							}
+
+							if ocs.HavePort(dst_port) {
+								logger.ProcessorLog.Debugf("Switch [%s] Port [%d] and Port [%d] both connect to OCS [%s], skip ", connTo.Device, dst_port, port, ocs.Device)
+								continue
+							}
+
+							for j := range serverLen[i] {
+								server := servers[j]
+								self.Switches[device].Ports[port].Server = append(self.Switches[device].Ports[port].Server, server)
+								connTo.Server = append(connTo.Server, server)
+								self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
+									Device:   device,
+									SrcPort:  dst_port,
+									DestPort: port,
+									Ip:       self.Servers[server].Ip,
+								})
+								logger.ProcessorLog.Errorf("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, dst_port, server, port)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	ocss_context.Print()
+	return nil
+}

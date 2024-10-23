@@ -9,27 +9,24 @@ import (
 	"github.com/comp590/ocss/pkg/app"
 )
 
-type ServerOcss interface {
+type ServerApp interface {
 	app.App
-
-	CancelContext() context.Context
+	Processor() *Processor
 }
 
 type Server struct {
-	ServerOcss
-
-	States ocss_context.StatesDiagram
+	ServerApp
 }
 
-func NewServer(ocss ServerOcss) (*Server, error) {
+func NewServer(ocss ServerApp) (*Server, error) {
 	s := &Server{
-		ServerOcss: ocss,
+		ServerApp: ocss,
 	}
 
 	return s, nil
 }
 
-func (s Server) runState(stateName string, state ocss_context.State) string {
+func (s *Server) runState(stateName string, state ocss_context.State) string {
 	nextState := ""
 
 	for {
@@ -45,8 +42,10 @@ func (s Server) runState(stateName string, state ocss_context.State) string {
 	}
 }
 
-func (s Server) Run(traceCtx context.Context, wg *sync.WaitGroup) error {
+func (s *Server) Run(traceCtx context.Context, wg *sync.WaitGroup) error {
 	logger.ServerLog.Info("OCSS Server is running")
+
+	s.Processor().SetupForwardingTables()
 	// for stateName, state := range s.States.States {
 	// 	if state.InitState {
 	// 		go func() {

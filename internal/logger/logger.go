@@ -6,14 +6,15 @@ import (
 )
 
 var (
-	Log       *logrus.Logger
-	NfLog     *logrus.Entry
-	MainLog   *logrus.Entry
-	InitLog   *logrus.Entry
-	CfgLog    *logrus.Entry
-	CtxLog    *logrus.Entry
-	UtilLog   *logrus.Entry
-	ServerLog *logrus.Entry
+	Log          *logrus.Logger
+	NfLog        *logrus.Entry
+	MainLog      *logrus.Entry
+	InitLog      *logrus.Entry
+	CfgLog       *logrus.Entry
+	CtxLog       *logrus.Entry
+	UtilLog      *logrus.Entry
+	ServerLog    *logrus.Entry
+	ProcessorLog *logrus.Entry
 )
 
 func init() {
@@ -30,6 +31,6 @@ func init() {
 	CfgLog = NfLog.WithField(logger_util.FieldCategory, "CFG")
 	CtxLog = NfLog.WithField(logger_util.FieldCategory, "CTX")
 	UtilLog = NfLog.WithField(logger_util.FieldCategory, "Util")
+	ProcessorLog = NfLog.WithField(logger_util.FieldCategory, "Processor")
 	ServerLog = NfLog.WithField(logger_util.FieldCategory, "Server")
-
 }
