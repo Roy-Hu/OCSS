@@ -1,0 +1,24 @@
+{
+  "flow_mod": {
+    "_name": "vlan_tagged_",
+    "_description": "Description",
+    "#comments": "Comments",
+    "table": "vlan",
+    "cmd": "add",
+    "mask": "0",
+    "port": "any",
+    "group": "any",
+    "priority": "0",
+    "match": {
+      "in_port": "",
+      "vlan_vid": ""
+    },
+    "instructions": [
+      {
+        "goto": {
+          "table": "mac"
+        }
+      }
+    ]
+  }
+}

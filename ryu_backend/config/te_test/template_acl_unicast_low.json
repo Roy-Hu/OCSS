@@ -1,0 +1,39 @@
+{
+  "flow_mod": {
+    "_name": "acl_low_",
+    "_description": "Description",
+    "#comments": "Comments",
+    "table": "acl",
+    "cmd": "add",
+    "mask": "0",
+    "port": "any",
+    "group": "any",
+    "priority": "2",
+    "match": {
+      "in_port": "",
+      "eth_type": "0x0800",
+      "vlan_vid": "",
+      "ipv4_src": ""
+    },
+    "instructions": [
+      {
+        "write": [
+          {
+            "actions": [
+              {
+                "set_queue": {
+                  "queue_id": ""
+                }
+              },
+              {
+                "group": {
+                  "group_id": "0x0"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

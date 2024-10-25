@@ -1,0 +1,33 @@
+
+
+{
+  "flow_mod": {
+    "table": "acl",
+    "cmd": "modify",
+    "match": {
+      "eth_type": "0x0800",
+      "vlan_vid": "10",
+      "ipv4_dst": "192.168.50.112"
+    },
+    "instructions": [
+      {
+        "write": [
+          {
+            "actions": [
+              {
+                "set_queue": {
+                  "queue_id": "1"
+                }
+              },
+              {
+                "group": {
+                  "group_id": "0xa008"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

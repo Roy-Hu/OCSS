@@ -1,0 +1,20 @@
+{
+  "dpid": ,
+  "table_id": 60,
+  "priority": 1,
+  "match": {
+    "eth_type": 0x0800,
+    "vlan_vid": ,
+    "ipv4_dst": 
+  },
+  "actions": [
+    {
+      "type": "SET_QUEUE",
+      "queue_id": 
+    },
+    {
+      "type": "GROUP",
+      "group_id": 
+    }
+  ]
+}

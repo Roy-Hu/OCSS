@@ -1,0 +1,18 @@
+{
+  "flow_mod": {
+    "_name": "acl_vlan_del_",
+    "_description": "Description",
+    "#comments": "Comments",
+    "table": "acl",
+    "cmd": "del",
+    "mask": "0",
+    "port": "any",
+    "group": "any",
+    "match": {
+      "vlan_vid": "",
+      "eth_type": "0x0800"
+    },
+    "instructions": [
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "flow_mod": {
+    "_name": "acl_13_multi",
+    "_description": "Description",
+    "#comments": "Comments",
+    "table": "acl",
+    "cmd": "add",
+    "mask": "0",
+    "port": "any",
+    "group": "any",
+    "match": {
+      "eth_type": "0x0800",
+      "vlan_vid": "10",
+      "ipv4_dst": "236.0.0.13"
+    },
+    "instructions": [
+      {
+        "write": [
+          {
+            "actions": [
+              {
+                "set_queue": {
+                  "queue_id": "4"
+                }
+              },
+              {
+                "group": {
+                  "group_id": "0x300a000d"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

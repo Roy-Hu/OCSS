@@ -1,0 +1,12 @@
+{
+  "group_mod": {
+    "_name": "l2_multi_0x3",
+    "_description": "Description",
+    "#comments": "Comments",
+    "cmd": "add",
+    "type": "all",
+    "group_id": "0x3",
+    "buckets": [
+    ]
+  }
+}

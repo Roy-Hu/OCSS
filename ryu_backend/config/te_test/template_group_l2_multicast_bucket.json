@@ -1,0 +1,12 @@
+{
+  "weight": "0",
+  "watch_port": "any",
+  "watch_group": "any",
+  "actions": [
+    {
+      "group": {
+        "group_id": "0x0"
+      }
+    }
+  ]
+}

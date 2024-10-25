@@ -1,0 +1,37 @@
+{
+  "flow_mod": {
+    "_name": "acl_arp_multicast_",
+    "_description": "Description",
+    "#comments": "Comments",
+    "table": "acl",
+    "cmd": "add",
+    "mask": "0",
+    "port": "any",
+    "group": "any",
+    "priority": "4",
+    "match": {
+      "eth_type": "0x0806",
+      "vlan_vid": ""
+    },
+    "instructions": [
+      {
+        "write": [
+          {
+            "actions": [
+              {
+                "set_queue": {
+                  "queue_id": ""
+                }
+              },
+              {
+                "group": {
+                  "group_id": "0x3"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "config_directory": "./config/te_test/",
+  "working_set": "scenario_queueid_test.json",
+  "flattree_directory": "./flattree/",
+  "static_src_dst_rules": "./format1.txt",
+  "static_dst_rules": "./format2.txt",
+  "static_dst_rules_nocompress": "./format3.txt",
+  "static_inter_port_rules": "./format4.txt",
+  "config_port_vlan": "./port-vlan.txt",
+  "config_inter_port": "./tor-inter-port.txt"
+}
