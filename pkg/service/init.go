@@ -30,7 +30,7 @@ type SystemApp struct {
 
 	state     *ocss.Server
 	processor *ocss.Processor
-	rdc       *ocss.Rdc
+	forwarder *ocss.Forwarder
 }
 
 func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*SystemApp, error) {
@@ -46,11 +46,11 @@ func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*Sy
 	sys.ctx, sys.cancel = context.WithCancel(ctx)
 	sys.ocssCtx = ocss_context.GetSelf()
 
-	rdc, err := ocss.NewRdc(sys)
+	forwarder, err := ocss.NewForwarder(sys)
 	if err != nil {
 		return sys, err
 	}
-	sys.rdc = rdc
+	sys.forwarder = forwarder
 
 	processor, err := ocss.NewProcessor(sys)
 	if err != nil {
@@ -164,6 +164,6 @@ func (a *SystemApp) Processor() *ocss.Processor {
 	return a.processor
 }
 
-func (a *SystemApp) Rdc() *ocss.Rdc {
-	return a.rdc
+func (a *SystemApp) Forwarder() *ocss.Forwarder {
+	return a.forwarder
 }

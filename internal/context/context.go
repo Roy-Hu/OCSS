@@ -112,6 +112,7 @@ func Init() {
 			Name:   os.Name,
 			Ports:  make(map[int]*ConnectedTo),
 			Conn:   &Connection{},
+			Ip:     os.Ip,
 		}
 
 		ports, err := ParsePorts(os.Ports)
@@ -145,8 +146,6 @@ func Init() {
 			}
 		}
 	}
-
-	logger.CtxLog.Errorf("Switches: %v", ocssContext.UserView.ToRs["tor2"])
 
 	// Initialize hardware links and build server-to-switch-port mapping
 	for _, l := range configuration.NetworkManager.Links {

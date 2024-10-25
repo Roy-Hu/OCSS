@@ -139,6 +139,7 @@ func (ps *PacketSwitch) Validate() (bool, error) {
 type OpticalSwitch struct {
 	Name  string `yaml:"name" valid:"required"`
 	Ports string `yaml:"ports" valid:"required"`
+	Ip    string `yaml:"ip" valid:"required,ip"`
 }
 
 // Validate validates the OpticalSwitch struct.

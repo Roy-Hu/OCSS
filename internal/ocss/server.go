@@ -46,6 +46,7 @@ func (s *Server) Run(traceCtx context.Context, wg *sync.WaitGroup) error {
 	logger.ServerLog.Info("OCSS Server is running")
 
 	s.Processor().SetupForwardingTables()
+	s.Processor().SetupController()
 	// for stateName, state := range s.States.States {
 	// 	if state.InitState {
 	// 		go func() {

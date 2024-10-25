@@ -1,6 +1,4 @@
-bin/*
-Network_Controller-0.6-dev_RDC
-comp590
-ryu/*
-ryu_backend/*
-example/*
+bin
+.vscode
+ryu_backend/log
+*pyc

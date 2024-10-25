@@ -1,7 +1,7 @@
 package context
 
 type UserView struct {
-	OCSs map[string]*OCS
+	 OCSs map[string]*OCS
 	ToRs map[string]*ToR
 }
 
@@ -22,6 +22,7 @@ type OCS struct {
 	Name   string
 	Ports  map[int]*ConnectedTo
 	Conn   *Connection
+	Ip     string
 }
 
 type Connection struct {

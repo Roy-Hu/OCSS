@@ -9,7 +9,7 @@ import (
 type ProcessorOCSS interface {
 	app.App
 
-	Rdc() *Rdc
+	Forwarder() *Forwarder
 }
 
 type Processor struct {
@@ -159,4 +159,65 @@ func (p *Processor) SetupForwardingTables() error {
 
 	ocss_context.Print()
 	return nil
+}
+
+func (p *Processor) SetupController() {
+	self := ocss_context.GetSelf()
+	forwarder := p.Forwarder()
+
+	for _, sw := range self.Switches {
+		hostsPorts := make([]int, 0)
+		switchPorts := make([]int, 0)
+
+		for port, connTo := range sw.Ports {
+			if self.DeviceType[connTo.Device] == ocss_context.SERVER {
+				hostsPorts = append(hostsPorts, port)
+			} else {
+				switchPorts = append(switchPorts, port)
+			}
+		}
+
+		logger.CfgLog.Warnf("Switch Info: %d, %v, %v", sw.Id, hostsPorts, switchPorts)
+		forwarder.SetSwitchInfo(sw.Id, hostsPorts, switchPorts)
+	}
+
+	ocs_in_port := make([]int, 0)
+	ocs_out_port := make([]int, 0)
+
+	for _, ocs := range self.OCSs {
+
+		// ip := self.OCSs[ocs.Device].Ip
+		ocs_out_port = append(ocs_out_port, ocs.Conn.Out_port...)
+		ocs_in_port = append(ocs_in_port, ocs.Conn.In_port...)
+
+		forwarder.SetOCS(ocs.Ip, ocs_in_port, ocs_out_port)
+		logger.CfgLog.Warnf("OCS Info: %s, %v, %v", ocs.Ip, ocs_in_port, ocs_out_port)
+	}
+
+	for device, ft := range self.ForwardingTables {
+
+		in_port := make([]int, 0)
+		out_port := make([]int, 0)
+
+		in_port_ip := make([]int, 0)
+		out_port_ip := make([]int, 0)
+		ips := make([]string, 0)
+
+		for _, rule := range ft {
+			if rule.Ip != "" {
+				in_port_ip = append(in_port_ip, rule.SrcPort)
+				out_port_ip = append(out_port_ip, rule.DestPort)
+				ips = append(ips, rule.Ip)
+			} else {
+				in_port = append(in_port, rule.SrcPort)
+				out_port = append(out_port, rule.DestPort)
+			}
+		}
+
+		forwarder.SetForwardingTable(self.Switches[device].Id, in_port, out_port)
+		forwarder.SetForwardingTableWithIp(self.Switches[device].Id, in_port_ip, out_port_ip, ips)
+
+		logger.ProcessorLog.Warnf("Forwarding Table: %d, %v, %v", self.Switches[device].Id, in_port, out_port)
+		logger.ProcessorLog.Warnf("Forwarding Table with IP: %d, %v, %v, %v", self.Switches[device].Id, in_port_ip, out_port_ip, ips)
+	}
 }
