@@ -1,7 +1,7 @@
 package context
 
 type UserView struct {
-	 OCSs map[string]*OCS
+	OCSs map[string]*OCS
 	ToRs map[string]*ToR
 }
 

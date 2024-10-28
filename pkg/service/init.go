@@ -28,9 +28,10 @@ type SystemApp struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	state     *ocss.Server
-	processor *ocss.Processor
-	forwarder *ocss.Forwarder
+	server           *ocss.Server
+	processor        *ocss.Processor
+	forwarder        *ocss.Forwarder
+	state_controller *ocss.StateController
 }
 
 func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*SystemApp, error) {
@@ -58,7 +59,13 @@ func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*Sy
 	}
 	sys.processor = processor
 
-	if sys.state, err = ocss.NewServer(sys); err != nil {
+	state_controller, err := ocss.NewStateController(sys)
+	if err != nil {
+		return sys, err
+	}
+	sys.state_controller = state_controller
+
+	if sys.server, err = ocss.NewServer(sys); err != nil {
 		return nil, err
 	}
 
@@ -92,7 +99,6 @@ func (c *SystemApp) SetLogEnable(enable bool) {
 		logger.Log.SetOutput(os.Stderr)
 	} else {
 		logger.Log.SetOutput(io.Discard)
-
 	}
 }
 
@@ -127,7 +133,7 @@ func (a *SystemApp) Start() {
 	a.wg.Add(1)
 	go a.listenShutdownEvent()
 
-	if err := a.state.Run(context.Background(), &a.wg); err != nil {
+	if err := a.server.Run(a.ctx, &a.wg); err != nil {
 		logger.MainLog.Fatalf("Run OCSS server failed: %+v", err)
 	}
 }
@@ -155,8 +161,8 @@ func (c *SystemApp) terminateProcedure() {
 }
 
 func (a *SystemApp) CallServerStop() {
-	if a.state != nil {
-		a.state.Stop()
+	if a.server != nil {
+		a.server.Stop()
 	}
 }
 
@@ -166,4 +172,8 @@ func (a *SystemApp) Processor() *ocss.Processor {
 
 func (a *SystemApp) Forwarder() *ocss.Forwarder {
 	return a.forwarder
+}
+
+func (a *SystemApp) StateController() *ocss.StateController {
+	return a.state_controller
 }

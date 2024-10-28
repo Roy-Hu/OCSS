@@ -27,6 +27,7 @@ type OCSSContext struct {
 	DeviceType       map[string]DeviceType
 	ForwardingTables map[string][]*Forward
 	UserView         *UserView
+	States           map[string]*State
 }
 
 type Forward struct {
