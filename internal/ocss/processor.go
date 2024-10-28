@@ -52,23 +52,23 @@ func (p *Processor) SetupForwardingTables() error {
 								DestPort: out_port,
 							})
 
-							dst.Server = append(dst.Server, connTo.Device)
+							dst.Server[connTo.Device] = true
 
 							for i := range len(ocs.Conn.In_port) {
 								if ocs.Conn.In_port[i] == ocs_port {
 									out := ocs.Conn.Out_port[i]
-									self.OCSs[ocs.Device].Ports[out].Server = append(self.OCSs[ocs.Device].Ports[out].Server, connTo.Device)
+									self.OCSs[ocs.Device].Ports[out].Server[connTo.Device] = true
 
 									// TODO: What about ocs is connected to another ocs?
 									if self.DeviceType[ocs.Ports[out].Device] == ocss_context.SWITCH {
-										self.Switches[ocs.Ports[out].Device].Ports[ocs.Ports[out].Port].Server = append(self.Switches[ocs.Ports[out].Device].Ports[ocs.Ports[out].Port].Server, connTo.Device)
+										self.Switches[ocs.Ports[out].Device].Ports[ocs.Ports[out].Port].Server[connTo.Device] = true
 									}
 								} else if ocs.Conn.Out_port[i] == ocs_port {
 									in := ocs.Conn.In_port[i]
-									self.OCSs[ocs.Device].Ports[in].Server = append(self.OCSs[ocs.Device].Ports[in].Server, connTo.Device)
+									self.OCSs[ocs.Device].Ports[in].Server[connTo.Device] = true
 
 									if self.DeviceType[ocs.Ports[in].Device] == ocss_context.SWITCH {
-										self.Switches[ocs.Ports[in].Device].Ports[ocs.Ports[in].Port].Server = append(self.Switches[ocs.Ports[in].Device].Ports[ocs.Ports[in].Port].Server, connTo.Device)
+										self.Switches[ocs.Ports[in].Device].Ports[ocs.Ports[in].Port].Server[connTo.Device] = true
 									}
 								}
 							}
@@ -104,23 +104,24 @@ func (p *Processor) SetupForwardingTables() error {
 								continue
 							}
 
-							for _, server := range dst_connTo.Server {
-								self.Switches[device].Ports[port].Server = append(self.Switches[device].Ports[port].Server, server)
-								connTo.Server = append(connTo.Server, server)
-								self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
-									Device:   device,
-									SrcPort:  port,
-									DestPort: dst_port,
-									Ip:       self.Servers[server].Ip,
-								})
-								logger.ProcessorLog.Warnf("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, port, server, dst_port)
+							for server, ok := range dst_connTo.Server {
+								if ok {
+									self.Switches[device].Ports[port].Server[server] = true
+									connTo.Server[server] = true
+									self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
+										Device:   device,
+										SrcPort:  port,
+										DestPort: dst_port,
+										Ip:       self.Servers[server].Ip,
+									})
+									logger.ProcessorLog.Warnf("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, port, server, dst_port)
+								}
 							}
 						}
 					}
 				}
 
 				ports = []*ocss_context.ConnectedTo{ocs.Ports[inPort], ocs.Ports[outPort]}
-				serverLen := []int{len(ports[0].Server), len(ports[1].Server)}
 				for i, connTo := range ports {
 					port := ports[1-i].Port
 					device := ports[1-i].Device
@@ -138,17 +139,18 @@ func (p *Processor) SetupForwardingTables() error {
 								continue
 							}
 
-							for j := range serverLen[i] {
-								server := servers[j]
-								self.Switches[device].Ports[port].Server = append(self.Switches[device].Ports[port].Server, server)
-								connTo.Server = append(connTo.Server, server)
-								self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
-									Device:   device,
-									SrcPort:  dst_port,
-									DestPort: port,
-									Ip:       self.Servers[server].Ip,
-								})
-								logger.ProcessorLog.Errorf("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, dst_port, server, port)
+							for server, ok := range servers {
+								if ok {
+									self.Switches[device].Ports[port].Server[server] = true
+									connTo.Server[server] = true
+									self.ForwardingTables[device] = append(self.ForwardingTables[device], &ocss_context.Forward{
+										Device:   device,
+										SrcPort:  dst_port,
+										DestPort: port,
+										Ip:       self.Servers[server].Ip,
+									})
+									logger.ProcessorLog.Errorf("Switch [%s] Port [%d] -> Server [%s] Port [%d]", device, dst_port, server, port)
+								}
 							}
 						}
 					}

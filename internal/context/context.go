@@ -46,7 +46,7 @@ type ConnectedTo struct {
 	Device string
 	Name   string
 	Port   int
-	Server []string
+	Server map[string]bool
 }
 
 type Link struct {
@@ -164,6 +164,7 @@ func Init() {
 			connTo := &ConnectedTo{
 				Device: dst,
 				Port:   dstPort,
+				Server: make(map[string]bool),
 			}
 
 			for tor_name, tor := range ocssContext.UserView.ToRs {
@@ -176,7 +177,7 @@ func Init() {
 			}
 
 			if ocssContext.DeviceType[dst] == SERVER {
-				connTo.Server = append(connTo.Server, dst)
+				connTo.Server[dst] = true
 			}
 
 			switch ocssContext.DeviceType[src] {
@@ -194,7 +195,7 @@ func Init() {
 			connTo = &ConnectedTo{
 				Device: src,
 				Port:   srcPort,
-				Server: []string{},
+				Server: make(map[string]bool),
 			}
 
 			for tor_name, tor := range ocssContext.UserView.ToRs {
@@ -207,7 +208,7 @@ func Init() {
 			}
 
 			if ocssContext.DeviceType[src] == SERVER {
-				connTo.Server = append(connTo.Server, src)
+				connTo.Server[src] = true
 			}
 
 			switch ocssContext.DeviceType[dst] {
@@ -262,10 +263,11 @@ func Init() {
 				ocs.Ports[l.SourcePorts[i]] = &ConnectedTo{
 					Device: l.Destination,
 					Port:   l.DestinationPorts[i],
+					Server: make(map[string]bool),
 				}
 				if ocssContext.DeviceType[l.Destination] == SERVER {
-					ocs.Ports[l.SourcePorts[i]].Server = append(ocs.Ports[l.SourcePorts[i]].Server, l.Destination)
-					ocssContext.OCSs[ocs.Device].Ports[l.SourcePorts[i]].Server = append(ocssContext.OCSs[ocs.Device].Ports[l.SourcePorts[i]].Server, l.Destination)
+					ocs.Ports[l.SourcePorts[i]].Server[l.Destination] = true
+					ocssContext.OCSs[ocs.Device].Ports[l.SourcePorts[i]].Server[l.Destination] = true
 				}
 			}
 
@@ -277,10 +279,11 @@ func Init() {
 				ocssContext.UserView.OCSs[l.Destination].Ports[l.DestinationPorts[i]] = &ConnectedTo{
 					Device: l.Source,
 					Port:   l.SourcePorts[i],
+					Server: make(map[string]bool),
 				}
 				if ocssContext.DeviceType[l.Source] == SERVER {
-					ocs.Ports[l.DestinationPorts[i]].Server = append(ocs.Ports[l.DestinationPorts[i]].Server, l.Source)
-					ocssContext.OCSs[ocs.Device].Ports[l.DestinationPorts[i]].Server = append(ocssContext.OCSs[ocs.Device].Ports[l.DestinationPorts[i]].Server, l.Source)
+					ocs.Ports[l.DestinationPorts[i]].Server[l.Source] = true
+					ocssContext.OCSs[ocs.Device].Ports[l.DestinationPorts[i]].Server[l.Source] = true
 				}
 			}
 			continue
