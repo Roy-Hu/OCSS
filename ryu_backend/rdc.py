@@ -237,7 +237,7 @@ class RDC(app_manager.RyuApp):
         
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def handler_datapath(self, ev):
-        LOG.info("Datapath Event Received")
+        LOG.info("Datapath Event Received %d", ev.dp.id)
         self.dataPaths[ev.dp.id] = ev.dp
         # if ev.enter:
         #     self.build_packets(ev.dp, ev.dp.id)
