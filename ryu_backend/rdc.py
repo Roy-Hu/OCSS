@@ -97,7 +97,7 @@ class RDC(app_manager.RyuApp):
         self.config_acl_arp_multicast = ConfigParser.get_config(template_acl_arp_multicast_filename)
   
     def create_group_l2_interface(self, template, dp, vlan, outputPort):
-        LOG.debug("Create Group L2 Interface for port %d", outputPort)
+        LOG.info("Create Group L2 Interface for dpid %d port %d", dp.id, outputPort)
         group_l2_interface = copy.deepcopy(template)
         group_l2_interface['group_mod']['_name'] += "%03x%04x" % (vlan, outputPort)
         group_l2_interface['group_mod']['group_id'] += "%03x%04x" % (vlan, outputPort)
@@ -144,7 +144,6 @@ class RDC(app_manager.RyuApp):
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (
         vlan, outputPort)
         
-        print(acl_unicast)
         self.install_flow_mod(dp, acl_unicast)
         return
 
@@ -164,18 +163,9 @@ class RDC(app_manager.RyuApp):
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
  
-    def create_acl_arp_flood(self, dp,  vlan, id = 3276):
-        acl_arp = copy.deepcopy(self.config_acl_arp_multicast)
-        acl_arp['flow_mod']['_name'] += str(vlan)
-        acl_arp['flow_mod']['match']['vlan_vid'] += str(vlan)
-        acl_arp['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(1)
-        acl_arp['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (vlan, id)
-        self.install_flow_mod(dp, acl_arp)
-        return
 
     def createGroupInterfaces(self, dp, vlan=10):
-        LOG.debug("Create Group Interface for ports")
-        
+        LOG.info("Create Group Interface for ports")
         for port in self.hostPorts[dp.id]:
             self.create_group_l2_interface(self.groupConfigPopVlan, dp, vlan, port)
         for port in self.switchPorts[dp.id]:
@@ -198,21 +188,21 @@ class RDC(app_manager.RyuApp):
         return
 
     def tagVlan(self, dp, vlan=10):
-        LOG.debug("Tag Vlan")
+        LOG.info("Tag Vlan")
         # TODO
         for inPort in range(1, 42):
             self.create_vlan(dp, vlan, inPort)
-    
+
+    def init_switch(self, dp, vlan = 10):
+        self.createGroupInterfaces(dp, vlan)
+        self.tagVlan(dp, vlan)
+
     def build_packets(self, dp, dpid):
         LOG.info("Build Packets for Swiich %d", dpid)
         
         if dpid in self.switch_ids:
             defaultVlan = 10
-            self.createGroupInterfaces(dp, defaultVlan)
-            self.tagVlan(dp, defaultVlan)
-            
-            self.create_acl_arp_flood(dp, 10)
-
+            # self.create_acl_arp_flood(dp, defaultVlan)
             in_ports = []
             out_ports = []
             
@@ -221,19 +211,23 @@ class RDC(app_manager.RyuApp):
                 out_ports += [outPort]
                 self.create_acl_unicast_vlan_inPort(dp, defaultVlan, inPort, outPort)
                 self.create_acl_unicast_vlan_inPort(dp, defaultVlan, outPort, inPort)
-                
-            PrintConnections(LOG, in_ports, out_ports)
+            
+            self.fowardingTable[dpid] = []
+            # PrintConnections(LOG, in_ports, out_ports)
             
             in_ports = []
             out_ports = []
             
             for dpid, ports in self.forwardingTableWithIp.items():
+                if dpid != dp.id:
+                    continue
                 for (inPort, outPort), dstIp in ports.items():
                     in_ports = []
                     out_ports = []
                     self.create_acl_unicast_vlan_inPort_dstIp(dp, defaultVlan, inPort, dstIp, outPort)
-
-            PrintConnections(LOG, in_ports, out_ports)
+                    
+            self.forwardingTableWithIp = {}
+            # PrintConnections(LOG, in_ports, out_ports)
         
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def handler_datapath(self, ev):
@@ -244,7 +238,6 @@ class RDC(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
-        LOG.info("PacketIn Event Received")
         LOG.info("Event Datapath Id: %i", ev.msg.datapath.id)
 
         msg = ev.msg
@@ -259,12 +252,10 @@ class RDC(app_manager.RyuApp):
         from OCSRelated.connections import GxcConnections
         from OCSRelated.optionsForShareBackup import Options
         LOG.info("OCS_create_initial_connections")
-        LOG.info("OCS Edge Connection:")
-        PrintConnections(LOG, self.ocs_in_port, self.ocs_out_port)
+        # PrintConnections(LOG, self.ocs_in_port, self.ocs_out_port)
         
         LOG.info("In Port: %s", self.ocs_in_port)
         LOG.info("Out Port: %s", self.ocs_out_port)
         connectionObj = GxcConnections(Options())
         connectionObj.ent_crs_fiber(self.ocs_in_port, self.ocs_out_port)
-        
 

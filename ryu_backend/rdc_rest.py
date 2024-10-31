@@ -67,7 +67,7 @@ class RDCController(ControllerBase):
 
     @route('rdc', url_set_ocs, methods=['POST'])
     def set_ocs(self, req, **kwargs):
-        LOG.info("Set OCS")
+        LOG.debug("Set OCS")
         ip = kwargs['ip']
 
         try:
@@ -82,8 +82,8 @@ class RDCController(ControllerBase):
         ocs_in_port = data.get('ocs_in_port')
         ocs_out_port = data.get('ocs_out_port')
         
-        LOG.info("REST OCS in port: %s", ocs_in_port)
-        LOG.info("REST OCS out port: %s", ocs_out_port)
+        LOG.debug("REST OCS in port: %s", ocs_in_port)
+        LOG.debug("REST OCS out port: %s", ocs_out_port)
         if ocs_in_port is None or ocs_out_port is None:
             LOG.error("Missing 'ocs_in_port' or 'ocs_out_port' in payload")
             return Response(status=400, body="Missing 'ocs_in_port' or 'ocs_out_port' in payload")
@@ -100,11 +100,11 @@ class RDCController(ControllerBase):
             LOG.error("'ocs_out_port' must be a list of integers")
             return Response(status=400, body="'ocs_out_port' must be a list of integers")
 
-        LOG.info("Successfully updated switch info for IP: %s", ip)
+        LOG.debug("Successfully updated switch info for IP: %s", ip)
 
         try:
-            self.rdc_app.ocs_in_port.extend(ocs_in_port)
-            self.rdc_app.ocs_out_port.extend(ocs_out_port)
+            self.rdc_app.ocs_in_port.extend(ocs_in_port + ocs_out_port)
+            self.rdc_app.ocs_out_port.extend(ocs_out_port + ocs_in_port)
             self.rdc_app.OCS_create_initial_connections()
         except Exception as e:
             LOG.exception("Error updating switch info for IP %s: %s", ip, e)
@@ -121,7 +121,7 @@ class RDCController(ControllerBase):
             "switchPorts": [9, 111, 69]
         }
         """
-        LOG.info("Set Switch Info")
+        LOG.debug("Set Switch Info")
         dpid_str = kwargs['dpid']
         dpid = dpid_lib.str_to_dpid(dpid_str)  # Convert string to integer dpid
 
@@ -159,14 +159,17 @@ class RDCController(ControllerBase):
             self.rdc_app.switch_ids.add(dpid)
             self.rdc_app.hostPorts[dpid] = host_ports
             self.rdc_app.switchPorts[dpid] = switch_ports
+
+            dp = self.rdc_app.dataPaths.get(dpid)
+            self.rdc_app.init_switch(dp)
         except Exception as e:
             LOG.exception("Exception while setting switch info for dpid %d: %s", dpid, e)
             return Response(status=500, body='Internal Server Error while setting switch info')
 
 
-        LOG.info("Switch ID: %d", dpid)
-        LOG.info("Switch Host Ports: %s", self.rdc_app.hostPorts[dpid])
-        LOG.info("Switch Switch Ports: %s", self.rdc_app.switchPorts[dpid])
+        LOG.debug("Switch ID: %d", dpid)
+        LOG.debug("Switch Host Ports: %s", self.rdc_app.hostPorts[dpid])
+        LOG.debug("Switch Switch Ports: %s", self.rdc_app.switchPorts[dpid])
         try:
             # Reinstall flows with updated variables
             # self.rdc_app.update_flows()
@@ -199,12 +202,12 @@ class RDCController(ControllerBase):
             return Response(status=400, body='Entries must be a list')
 
         self.rdc_app.fowardingTable[dpid] = entries
-
+        LOG.debug("REST Forwarding Table: %s", self.rdc_app.fowardingTable)
         dp = self.rdc_app.dataPaths.get(dpid)
         if dp:
             try:
                 self.rdc_app.build_packets(dp, dpid)
-                LOG.info("Successfully built packets for dpid %s", dpid_str)
+                LOG.debug("Successfully built packets for dpid %s", dpid_str)
             except Exception as e:
                 LOG.exception("Error building packets for dpid %s: %s", dpid_str, e)
                 return Response(status=500, body='Internal Server Error while building packets')
@@ -212,7 +215,7 @@ class RDCController(ControllerBase):
             LOG.error("Datapath %s not found", dpid_str)
             return Response(status=404, body='Datapath not found')
         
-        LOG.info("Forwarding Table: %s", self.rdc_app.fowardingTable[dpid])
+        LOG.debug("REST Forwarding Table: %s", self.rdc_app.fowardingTable[dpid])
 
         return Response(status=200)
 
@@ -250,7 +253,7 @@ class RDCController(ControllerBase):
         if dp:
             try:
                 self.rdc_app.build_packets(dp, dpid)
-                LOG.info("Successfully built packets for dpid %s", dpid_str)
+                LOG.debug("Successfully built packets for dpid %s", dpid_str)
             except Exception as e:
                 LOG.exception("Error building packets for dpid %s: %s", dpid_str, e)
                 return Response(status=500, body='Internal Server Error while building packets')
@@ -258,6 +261,6 @@ class RDCController(ControllerBase):
             LOG.error("Datapath %s not found", dpid_str)
             return Response(status=404, body='Datapath not found')
         
-        LOG.info("Forwarding Table with IP: %s", self.rdc_app.forwardingTableWithIp[dpid])
+        LOG.debug("Forwarding Table with IP: %s", self.rdc_app.forwardingTableWithIp[dpid])
 
         return Response(status=200)

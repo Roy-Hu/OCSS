@@ -122,7 +122,9 @@ func Init() {
 			continue
 		}
 		for _, p := range ports {
-			o.Ports[p] = &ConnectedTo{}
+			o.Ports[p] = &ConnectedTo{
+				Server: make(map[string]bool),
+			}
 		}
 
 		ocssContext.OCSs[os.Name] = o
