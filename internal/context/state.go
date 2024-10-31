@@ -6,8 +6,8 @@ import (
 )
 
 type State struct {
-	Triggers  []func(ctx context.Context) bool
-	Actions   []func() string
+	Triggers  []func(ctx context.Context) bool `yaml:"-"`
+	Actions   []func() string                  `yaml:"-"`
 	InitState bool
 }
 
