@@ -158,73 +158,40 @@ func Init() {
 			continue
 		}
 
+		srcDst := []string{src, dst}
 		for i := range len(l.SourcePorts) {
-			srcPort := l.SourcePorts[i]
-			dstPort := l.DestinationPorts[i]
+			srcDstPorts := []int{l.SourcePorts[i], l.DestinationPorts[i]}
+			for j, port := range srcDstPorts {
+				connTo := &ConnectedTo{
+					Device: srcDst[j],
+					Port:   port,
+				}
 
-			connTo := &ConnectedTo{
-				Device: dst,
-				Port:   dstPort,
-			}
-
-			for tor_name, tor := range ocssContext.UserView.ToRs {
-				if tor.Device == l.Destination {
-					if _, ok := tor.Ports[l.DestinationPorts[i]]; ok {
-						connTo.Name = tor_name
-						tor.Ports[l.DestinationPorts[i]] = connTo
+				for tor_name, tor := range ocssContext.UserView.ToRs {
+					if tor.Device == srcDst[j] {
+						if _, ok := tor.Ports[port]; ok {
+							connTo.Name = tor_name
+							tor.Ports[port] = connTo
+						}
 					}
 				}
-			}
 
-			if ocssContext.DeviceType[dst] == SERVER {
-				connTo.Server = make(map[string]bool)
-				connTo.Server[dst] = true
-			}
-
-			switch ocssContext.DeviceType[src] {
-			case SWITCH:
-				ocssContext.Switches[src].Ports[srcPort] = connTo
-			case OPTICAL_SWITCH:
-				ocssContext.OCSs[src].Ports[srcPort] = connTo
-			case SERVER:
-				ocssContext.Servers[src].Ports[srcPort] = connTo
-			default:
-				logger.CtxLog.Errorf("Link %s -> %s is invalid: source is not a switch, ocs, or server", src, dst)
-				continue
-			}
-
-			connTo = &ConnectedTo{
-				Device: src,
-				Port:   srcPort,
-			}
-
-			for tor_name, tor := range ocssContext.UserView.ToRs {
-				if tor.Device == l.Source {
-					if _, ok := tor.Ports[l.SourcePorts[i]]; ok {
-						connTo.Name = tor_name
-						tor.Ports[l.SourcePorts[i]] = connTo
-					}
+				if ocssContext.DeviceType[srcDst[j]] == SERVER {
+					connTo.Server = make(map[string]bool)
+					connTo.Server[srcDst[j]] = true
 				}
-			}
 
-			if ocssContext.DeviceType[src] == SERVER {
-				connTo.Server = make(map[string]bool)
-				connTo.Server[src] = true
-			} else if ocssContext.DeviceType[dst] == SERVER {
-				connTo.Server = make(map[string]bool)
-				connTo.Server[dst] = true
-			}
-
-			switch ocssContext.DeviceType[dst] {
-			case SWITCH:
-				ocssContext.Switches[dst].Ports[dstPort] = connTo
-			case OPTICAL_SWITCH:
-				ocssContext.OCSs[dst].Ports[dstPort] = connTo
-			case SERVER:
-				ocssContext.Servers[dst].Ports[dstPort] = connTo
-			default:
-				logger.CtxLog.Errorf("Link %s -> %s is invalid: source is not a switch, ocs, or server", src, dst)
-				continue
+				switch ocssContext.DeviceType[srcDst[1-j]] {
+				case SWITCH:
+					ocssContext.Switches[srcDst[1-j]].Ports[srcDstPorts[1-j]] = connTo
+				case OPTICAL_SWITCH:
+					ocssContext.OCSs[srcDst[1-j]].Ports[srcDstPorts[1-j]] = connTo
+				case SERVER:
+					ocssContext.Servers[srcDst[1-j]].Ports[srcDstPorts[1-j]] = connTo
+				default:
+					logger.CtxLog.Errorf("Link %s -> %s is invalid: source is not a switch, ocs, or server", src, dst)
+					continue
+				}
 			}
 		}
 	}
