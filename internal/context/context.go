@@ -122,9 +122,7 @@ func Init() {
 			continue
 		}
 		for _, p := range ports {
-			o.Ports[p] = &ConnectedTo{
-				Server: make(map[string]bool),
-			}
+			o.Ports[p] = &ConnectedTo{}
 		}
 
 		ocssContext.OCSs[os.Name] = o
@@ -167,7 +165,6 @@ func Init() {
 			connTo := &ConnectedTo{
 				Device: dst,
 				Port:   dstPort,
-				Server: make(map[string]bool),
 			}
 
 			for tor_name, tor := range ocssContext.UserView.ToRs {
@@ -180,6 +177,7 @@ func Init() {
 			}
 
 			if ocssContext.DeviceType[dst] == SERVER {
+				connTo.Server = make(map[string]bool)
 				connTo.Server[dst] = true
 			}
 
@@ -198,7 +196,6 @@ func Init() {
 			connTo = &ConnectedTo{
 				Device: src,
 				Port:   srcPort,
-				Server: make(map[string]bool),
 			}
 
 			for tor_name, tor := range ocssContext.UserView.ToRs {
@@ -211,7 +208,11 @@ func Init() {
 			}
 
 			if ocssContext.DeviceType[src] == SERVER {
+				connTo.Server = make(map[string]bool)
 				connTo.Server[src] = true
+			} else if ocssContext.DeviceType[dst] == SERVER {
+				connTo.Server = make(map[string]bool)
+				connTo.Server[dst] = true
 			}
 
 			switch ocssContext.DeviceType[dst] {
@@ -266,27 +267,17 @@ func Init() {
 				ocs.Ports[l.SourcePorts[i]] = &ConnectedTo{
 					Device: l.Destination,
 					Port:   l.DestinationPorts[i],
-					Server: make(map[string]bool),
-				}
-				if ocssContext.DeviceType[l.Destination] == SERVER {
-					ocs.Ports[l.SourcePorts[i]].Server[l.Destination] = true
-					ocssContext.OCSs[ocs.Device].Ports[l.SourcePorts[i]].Server[l.Destination] = true
 				}
 			}
 
 			continue
 		}
 
-		if ocs, ok := ocssContext.UserView.OCSs[l.Destination]; ok {
+		if _, ok := ocssContext.UserView.OCSs[l.Destination]; ok {
 			for i := range l.DestinationPorts {
 				ocssContext.UserView.OCSs[l.Destination].Ports[l.DestinationPorts[i]] = &ConnectedTo{
 					Device: l.Source,
 					Port:   l.SourcePorts[i],
-					Server: make(map[string]bool),
-				}
-				if ocssContext.DeviceType[l.Source] == SERVER {
-					ocs.Ports[l.DestinationPorts[i]].Server[l.Source] = true
-					ocssContext.OCSs[ocs.Device].Ports[l.DestinationPorts[i]].Server[l.Source] = true
 				}
 			}
 			continue
@@ -294,6 +285,8 @@ func Init() {
 
 		logger.CtxLog.Errorf("Link %s -> %s is invalid: one of the source and destination should be a ocs", l.Source, l.Destination)
 	}
+
+	Print()
 }
 
 // ParsePorts parses a string of ports like "1000:2000,3001" into a slice of integers.

@@ -7,10 +7,8 @@ type UserView struct {
 
 func (u *UserView) FindToRByDeviceAndPort(device string, port int) *ToR {
 	for _, toR := range u.ToRs {
-		if toR.Device == device {
-			if toR.HavePort(port) {
-				return toR
-			}
+		if toR.Device == device && toR.HavePort(port) {
+			return toR
 		}
 	}
 
