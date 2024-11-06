@@ -259,3 +259,5 @@ class RDC(app_manager.RyuApp):
         connectionObj = GxcConnections(Options())
         connectionObj.ent_crs_fiber(self.ocs_in_port, self.ocs_out_port)
 
+        self.ocs_in_port = []
+        self.ocs_out_port = []
