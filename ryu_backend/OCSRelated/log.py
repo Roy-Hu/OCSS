@@ -42,7 +42,7 @@ class Log:
         # Move all the old logs into the old folder.
 
     def archiveLogs(self):
-        print "Moving all old logs into old/"
+        print("Moving all old logs into old/")
         source = os.listdir("./log/")
         destination = "./log/old/"
         for files in source:
@@ -94,7 +94,7 @@ class Log:
         elif logtype == "straggle" or logtype == "STRAGGLE":
             logObj = self.stragglelog
         else:
-            raise ValueError, 'Invalid logtype:' + logtype
+            raise ValueError('Invalid logtype:' + logtype)
 
         line = datetime.now().isoformat() + ',' + msg
         logObj.write(line)

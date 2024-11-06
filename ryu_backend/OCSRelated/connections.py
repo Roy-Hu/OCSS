@@ -85,7 +85,7 @@ class GxcConnections(TL1):
         self.debugMsg("Status is not complete...Aborting\n")
         return False
 
-    def ent_crs_fiber(self, inports, outports, async=False):
+    def ent_crs_fiber(self, inports, outports, is_async=False):
         # convert the ports from human readable ports to machine readable ports
         self.debugMsg("Inport In: " + str(inports))
         self.debugMsg("Outport In: " + str(outports))
@@ -102,7 +102,7 @@ class GxcConnections(TL1):
         
         # send the message
         command_str_fmt = 'ent-crs-fiber::{},{}:1%s;'.format(inport_str, outport_str)
-        command_str = command_str_fmt % (":::opmode=async" if async else "")
+        command_str = command_str_fmt % (":::opmode=async" if is_async else "")
 
         self.debugMsg("Command: " + command_str)
 
@@ -112,7 +112,7 @@ class GxcConnections(TL1):
         command_str = 'ent-crs-fiber::{},{}:1;'.format("all", "all")
         return self.command(command_str)
 
-    def dlt_crs_fiber(self, inports, outports, async=False):
+    def dlt_crs_fiber(self, inports, outports, is_async=False):
         # convert the ports from human readable ports to machine readable ports
         inport_list = [str(i % 10000 + 10000) for i in inports]
         outport_list = [str(o % 20000 + 20000) for o in outports]
@@ -123,13 +123,13 @@ class GxcConnections(TL1):
 
         # send the message
         command_str_fmt = 'dlt-crs-fiber::{},{}:1%s;'.format(inport_str, outport_str)
-        command_str = command_str_fmt % (":::opmode=async" if async else "")
+        command_str = command_str_fmt % (":::opmode=async" if is_async else "")
 
         return self.command(command_str)
 
-    def dlt_crs_fiber_all(self, async=False):
+    def dlt_crs_fiber_all(self, is_async=False):
         command_str_fmt = 'dlt-crs-fiber::all:1%s;'
-        command_str = command_str_fmt % (":::opmode=async" if async else "")
+        command_str = command_str_fmt % (":::opmode=async" if is_async else "")
         return self.command(command_str)
 
     def ed_param(self, val):
@@ -185,12 +185,12 @@ class GxcConnections(TL1):
         # print"crs list  "
         # print crs_list
         for crs in crs_list:
-            print "cross list is     "
-            print crs
-            print crs['SRCPORT']
-            print str(source)
-            print crs['DSTPORT']
-            print str(dest)
+            print("cross list is     ")
+            print(crs)
+            print(crs['SRCPORT'])
+            print(str(source))
+            print(crs['DSTPORT'])
+            print(str(dest))
             # '''
             if crs['SRCPORT'] == str(source) and crs['DSTPORT'] == str(dest):
 

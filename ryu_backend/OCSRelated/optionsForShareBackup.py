@@ -130,7 +130,7 @@ class Options:
             try:
                 defaults = dict(config.items("Defaults"))
             except:  # default conf
-                print "Unable to find sections in Config file:" + config_file
+                print("Unable to find sections in Config file:" + config_file)
                 defaults = {'target': '192.168.0.2',
                             'username': 'root',
                             'password': '',
@@ -191,7 +191,7 @@ class Options:
         self.concurrency = self.results['concurrency']
 
         if self.deleteall:
-            print 'Proceeding to delete all connections...'
+            print('Proceeding to delete all connections...')
 
         # print "************** Options **************"
         # print "Target IP:\t", self.targetip

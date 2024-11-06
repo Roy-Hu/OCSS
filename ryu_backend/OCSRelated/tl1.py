@@ -1,7 +1,6 @@
 import re
 import telnetlib
 from datetime import datetime
-import time
 import log
 
 
@@ -52,7 +51,7 @@ class TL1:
 
     def printMsg(self, msg):
         time = datetime.now().isoformat()
-        print time + "," + msg
+        print(time + "," + msg)
 
     def connect(self):
         msg = "Connecting to ... IP:%s Port:%s" % (self.ip, self.port)
@@ -71,9 +70,10 @@ class TL1:
         command_str = 'act-user::{}:1::{};'.format(self.username, self.password)
         self.scriptMsg(command_str)
         output = self.command(command_str)
-
+        
+        self.debugMsg(output)
         if self.completed_re.search(output) is None:  # None - No Match Found
-            raise ValueError, 'Failed to login with username ' + self.username + ' and password ' + self.password
+            raise ValueError('Failed to login with username ' + self.username + ' and password ' + self.password)
 
     def logout(self):
         command_str = 'canc-user:::{};'.format(self.username)
@@ -81,7 +81,7 @@ class TL1:
         output = self.command(command_str)
 
         if self.completed_re.search(output) is None:  # None - No Match Found
-            raise ValueError, 'command ' + command_str + ' failed.'
+            raise ValueError('command ' + command_str + ' failed.')
 
     def close(self):
         self.telnet_obj.close()
@@ -130,7 +130,7 @@ class TL1:
 
         index, matchedindex, reply = self.telnet_obj.expect(prompt_list, timeout)
         if index == -1:
-            raise ValueError, 'TELNET_ERROR: telnet to device ' + self.ip + ':' + str(self.port) + ' timed out. Data left in buffer was ' + str(reply) + '.'
+            raise ValueError('TELNET_ERROR: telnet to device ' + self.ip + ':' + str(self.port) + ' timed out. Data left in buffer was ' + str(reply) + '.')
         # print 'reply:\t', reply
         
         self.debugMsg(reply)
@@ -171,7 +171,7 @@ class TL1:
         output = self.command(commandstr)
         swtype = self.pattern_value(output, switchtype_re)
         if swtype == None:
-            raise ValueError, "Unable to find switch type:X320 or X272 "
+            raise ValueError("Unable to find switch type:X320 or X272")
         else:
             self.swtype = swtype[1:]  # X320,X272, remove the X
             msg = 'Switch Type:' + self.swtype
@@ -184,7 +184,7 @@ class TL1:
         output = self.command(commandstr)
         swnum = self.pattern_value(output, switchnum_re)
         if type is None:
-            raise ValueError, "Unable to find switch serial number "
+            raise ValueError("Unable to find switch serial number")
         else:
             self.swserial = swnum[5:]  # C00000729, strip leading 5(max sw upto 1999)
         return self.swserial
@@ -197,7 +197,7 @@ class TL1:
             fields = (portStr).split(".")
 
         except:
-            print 'exception in split'
+            print('exception in split')
         else:
             if len(fields) >= 3:
                 expr = '[1-6]\.[1-8]\.[1-8]'
@@ -206,13 +206,13 @@ class TL1:
                     return 3
                 else:
                     msg = "Invalid Port:" + port + " has to be in this range [1-6].[1-8].[1-8]"
-                    raise ValueError, msg
+                    raise ValueError(msg)
                     # return 0
             elif len(fields) == 1:
                 portid = int(portStr)
                 if (portid < 0 or portid >= 384):
                     msg = "Invalid Port:" + portStr + " has to be 1<= port <= 384 "
-                    raise ValueError, msg
+                    raise ValueError(msg)
                     # return 0
                 else:
                     return 1
@@ -222,7 +222,7 @@ class TL1:
         try:
             porttype = self.validate_port(portStr)
         except:
-            raise ValueError, 'Invalid Port:' + str(portStr)
+            raise ValueError('Invalid Port:' + str(portStr))
         else:
             if self.swtype == "320" and porttype == 3:  # port already in x.y.z format
                 return portStr
