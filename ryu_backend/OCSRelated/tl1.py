@@ -127,8 +127,12 @@ class TL1:
         # reply timeout
         if timeout is None:
             timeout = TL1.TIMEOUT
-
+        
+        start = datetime.now()
         index, matchedindex, reply = self.telnet_obj.expect(prompt_list, timeout)
+        end = datetime.now()
+        elapsed = end - start
+        print('elapsed time: ' + str(elapsed))
         if index == -1:
             raise ValueError('TELNET_ERROR: telnet to device ' + self.ip + ':' + str(self.port) + ' timed out. Data left in buffer was ' + str(reply) + '.')
         # print 'reply:\t', reply

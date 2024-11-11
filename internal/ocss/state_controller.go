@@ -27,7 +27,11 @@ func NewStateController(ocss StateControllerOCSS) (*StateController, error) {
 	return s, nil
 }
 
-func (s *StateController) runState(ctx context.Context, stateName string, state *ocss_context.State) string {
+func (s *StateController) runState(parentCtx context.Context, stateName string, state *ocss_context.State) string {
+	// Create a cancelable context derived from the parent context
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	fanIn := make(chan int)
 	var once sync.Once
 	var wg sync.WaitGroup
@@ -37,14 +41,19 @@ func (s *StateController) runState(ctx context.Context, stateName string, state 
 		wg.Add(1)
 		go func(index int, tf func(ctx context.Context) bool) {
 			defer wg.Done()
-			activated := tf(ctx) // Pass the context
+			activated := tf(ctx) // Pass the cancelable context
 			if activated {
 				once.Do(func() {
 					fanIn <- index
+					cancel() // Cancel other triggers
 				})
+			} else {
+				return
 			}
 		}(i, triggerFunc)
 	}
+
+	var resultState string
 
 	// Wait for the first trigger to activate or context cancellation
 	select {
@@ -53,20 +62,20 @@ func (s *StateController) runState(ctx context.Context, stateName string, state 
 		nxtStateName := state.Actions[triggerIndex]()
 
 		if nxtStateName != stateName {
-			return nxtStateName
+			resultState = nxtStateName
+		} else {
+			resultState = stateName
 		}
 
-		return stateName
-
 	case <-ctx.Done():
-		// Context was canceled, initiate shutdown
+		// Context was canceled externally or by a trigger
 		logger.StateLog.Infof("State [%s] shutting down due to context cancellation", stateName)
-		return ""
+		resultState = ""
 	}
 
-	// Wait for all trigger goroutines to finish
+	// Wait for all goroutines to finish
 	wg.Wait()
-	return ""
+	return resultState
 }
 
 func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
@@ -95,6 +104,9 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 						// Shutdown was initiated or no transition specified
 						break
 					}
+					// ocss_context.PrintFowardingRule()
+
+					s.Processor().UpdateForwardingTables()
 
 					currentStateName = nextState
 				}

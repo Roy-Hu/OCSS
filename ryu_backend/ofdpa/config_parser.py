@@ -52,8 +52,8 @@ class ConfigParser():
         return config.keys()
 
     @staticmethod
-    def get_flow_mod(config):
         return config["flow_mod"]
+    def get_flow_mod(config):
 
     @staticmethod
     def get_group_mod(config):

@@ -30,7 +30,6 @@ func (s *Server) Run(ctx context.Context, wg *sync.WaitGroup) error {
 	logger.ServerLog.Info("OCSS Server is running")
 
 	s.Processor().CreateForwardingTables()
-	s.Processor().SetupController()
 
 	s.StateController().Start(ctx, wg)
 

@@ -124,9 +124,9 @@ func (u *User) Validate() (bool, error) {
 
 // PacketSwitch represents a network packet switch.
 type PacketSwitch struct {
-	Name  string `yaml:"name" valid:"required"`
-	ID    int    `yaml:"id" valid:"required"`
-	Ports string `yaml:"ports" valid:"required"`
+	Device string `yaml:"device" valid:"required"`
+	ID     int    `yaml:"id" valid:"required"`
+	Ports  string `yaml:"ports" valid:"required"`
 }
 
 // Validate validates the PacketSwitch struct.
@@ -137,9 +137,9 @@ func (ps *PacketSwitch) Validate() (bool, error) {
 
 // OpticalSwitch represents an optical switch.
 type OpticalSwitch struct {
-	Name  string `yaml:"name" valid:"required"`
-	Ports string `yaml:"ports" valid:"required"`
-	Ip    string `yaml:"ip" valid:"required,ip"`
+	Device string `yaml:"device" valid:"required"`
+	Ports  string `yaml:"ports" valid:"required"`
+	Ip     string `yaml:"ip" valid:"required,ip"`
 }
 
 // Validate validates the OpticalSwitch struct.
@@ -165,8 +165,8 @@ func (s *Server) Validate() (bool, error) {
 type Link struct {
 	Source           string `yaml:"source" valid:"required"`
 	Destination      string `yaml:"destination" valid:"required"`
-	SourcePorts      []int  `yaml:"sourcePorts" valid:"required"`
-	DestinationPorts []int  `yaml:"destinationPorts" valid:"required"`
+	SourcePorts      string `yaml:"sourcePorts" valid:"required"`
+	DestinationPorts string `yaml:"destinationPorts" valid:"required"`
 }
 
 // Validate validates the Link struct, including length of SourcePorts and DestinationPorts.
@@ -176,30 +176,25 @@ func (l *Link) Validate() (bool, error) {
 		return result, appendInvalid(err)
 	}
 
-	// Custom validation: SourcePorts length must equal DestinationPorts length
-	if len(l.SourcePorts) != len(l.DestinationPorts) {
-		return false, fmt.Errorf("Link from '%s' to '%s' must have equal number of sourcePorts and destinationPorts", l.Source, l.Destination)
-	}
-
 	return true, nil
 }
 
 // UserOCS represents a user-defined OCS with multiple sections.
 type UserOCS struct {
-	Name     string    `yaml:"name" valid:"required"`
+	Device   string    `yaml:"device" valid:"required"`
 	Sections []Section `yaml:"sections,omitempty"`
 }
 
 type UserTor struct {
-	Name string `yaml:"name" valid:"required"`
-	ToRs []ToR  `yaml:"tors,omitempty"`
+	Device string `yaml:"device" valid:"required"`
+	ToRs   []ToR  `yaml:"tors,omitempty"`
 }
 
 // Validate validates the UserOCS struct, including length of SourcePorts and DestinationPorts for each section.
 func (uocs *UserOCS) Validate() (bool, error) {
-	if uocs.Name != "" {
+	if uocs.Device != "" {
 		if len(uocs.Sections) == 0 {
-			return false, fmt.Errorf("UserOCS '%s' must have at least one Section", uocs.Name)
+			return false, fmt.Errorf("UserOCS '%s' must have at least one Section", uocs.Device)
 		}
 
 		for _, section := range uocs.Sections {
@@ -214,9 +209,9 @@ func (uocs *UserOCS) Validate() (bool, error) {
 }
 
 func (utor *UserTor) Validate() (bool, error) {
-	if utor.Name != "" {
+	if utor.Device != "" {
 		if len(utor.ToRs) == 0 {
-			return false, fmt.Errorf("UserOCS '%s' must have at least one Section", utor.Name)
+			return false, fmt.Errorf("UserOCS '%s' must have at least one Section", utor.Device)
 		}
 
 		for _, tor := range utor.ToRs {
@@ -233,8 +228,9 @@ func (utor *UserTor) Validate() (bool, error) {
 // Section represents a section of an OCS.
 type Section struct {
 	Name             string `yaml:"name" valid:"required"`
-	SourcePorts      []int  `yaml:"sourcePorts" valid:"required"`
-	DestinationPorts []int  `yaml:"destinationPorts" valid:"required"`
+	Ports            string `yaml:"ports" valid:"required"`
+	SourcePorts      string `yaml:"sourcePorts" valid:"required"`
+	DestinationPorts string `yaml:"destinationPorts" valid:"required"`
 }
 
 // Validate validates the Section struct, ensuring SourcePorts and DestinationPorts have equal lengths.
@@ -244,17 +240,12 @@ func (section *Section) Validate() (bool, error) {
 		return result, appendInvalid(err)
 	}
 
-	// Custom validation: SourcePorts length must equal DestinationPorts length
-	if len(section.SourcePorts) != len(section.DestinationPorts) {
-		return false, fmt.Errorf("Section '%s' must have equal number of sourcePorts and destinationPorts", section.Name)
-	}
-
 	return true, nil
 }
 
 type ToR struct {
 	Name  string `yaml:"name" valid:"required"`
-	Ports []int  `yaml:"ports" valid:"required"`
+	Ports string `yaml:"ports" valid:"required"`
 }
 
 func (tor *ToR) Validate() (bool, error) {
@@ -264,13 +255,6 @@ func (tor *ToR) Validate() (bool, error) {
 	}
 
 	return true, nil
-}
-
-// VLAN represents a VLAN configuration.
-type VLAN struct {
-	Name    string `yaml:"name" valid:"required"`
-	PortNum int    `yaml:"portNum" valid:"required"`
-	Ports   []int  `yaml:"ports" valid:"optional"`
 }
 
 // Logger represents logger configuration.

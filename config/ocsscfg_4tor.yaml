@@ -1,0 +1,189 @@
+ocssName: ocss # OCSS name
+configuration:
+  networkManager: 
+    packetSwitchs:
+      - device: switch1
+        id: 1
+        ports: 2:7,18:23,26:31,36,39
+      - device: switch2
+        id: 5
+        ports: 2:7,18:23,26:31,35,36,40
+    opticalSwitchs:
+      - device: ocs
+        ports: 2:7,70:75,62:67,34:39,10,13,25,26,30
+        ip: 10.224.92.88
+    servers:
+      - name: server0
+        ip: 192.168.50.112
+        port: 112
+      - name: server1
+        ip: 192.168.50.113
+        port: 113
+      - name: server2
+        ip: 192.168.50.114
+        port: 114
+      - name: server3
+        ip: 192.168.50.115
+        port: 115
+      - name: server4
+        ip: 192.168.50.116
+        port: 116
+      - name: server5
+        ip: 192.168.50.117
+        port: 117
+      - name: server6
+        ip: 192.168.50.144
+        port: 144
+      - name: server7
+        ip: 192.168.50.145
+        port: 145
+      - name: server8
+        ip: 192.168.50.146
+        port: 146
+      - name: server9
+        ip: 192.168.50.147
+        port: 147
+      - name: server10
+        ip: 192.168.50.148
+        port: 148
+      - name: server11
+        ip: 192.168.50.149
+        port: 149
+    links:
+      - source: server0
+        destination: switch1
+        sourcePorts: 112
+        destinationPorts: 2
+      - source: server1
+        destination: switch1
+        sourcePorts: 113
+        destinationPorts: 3
+      - source: server2
+        destination: switch1
+        sourcePorts: 114
+        destinationPorts: 4
+      - source: server3
+        destination: switch1
+        sourcePorts: 115
+        destinationPorts: 5
+      - source: server4
+        destination: switch1
+        sourcePorts: 116
+        destinationPorts: 6
+      - source: server5
+        destination: switch1
+        sourcePorts: 117
+        destinationPorts: 7
+      - source: server6
+        destination: switch2
+        sourcePorts: 144
+        destinationPorts: 2
+      - source: server7
+        destination: switch2
+        sourcePorts: 145
+        destinationPorts: 3
+      - source: server8
+        destination: switch2
+        sourcePorts: 146
+        destinationPorts: 4
+      - source: server9
+        destination: switch2
+        sourcePorts: 147
+        destinationPorts: 5
+      - source: server10
+        destination: switch2
+        sourcePorts: 148
+        destinationPorts: 6
+      - source: server11
+        destination: switch2
+        sourcePorts: 149
+        destinationPorts: 7
+      - source: switch1
+        destination: ocs
+        sourcePorts: 18:23,26:31,36,39
+        destinationPorts: 2:7,70:75,10,13
+      - source: switch2
+        destination: ocs
+        sourcePorts: 18:23,26:31,35,36,40
+        destinationPorts: 34:39,62:67,25,26,30
+    fowarder:
+        name: ryu
+        address: http://127.0.0.1:8010
+  user:
+    link:
+      - source: server0
+        destination: ocs_edge
+        sourcePorts: 112
+        destinationPorts: 2
+      - source: server1
+        destination: ocs_edge
+        sourcePorts: 113
+        destinationPorts: 3
+      - source: server2
+        destination: ocs_edge
+        sourcePorts: 114
+        destinationPorts: 4
+      - source: server3
+        destination: ocs_edge
+        sourcePorts: 115
+        destinationPorts: 5
+      - source: server4
+        destination: ocs_edge
+        sourcePorts: 116
+        destinationPorts: 6
+      - source: server5
+        destination: ocs_edge
+        sourcePorts: 117
+        destinationPorts: 7
+      - source: server6
+        destination: ocs_edge
+        sourcePorts: 144
+        destinationPorts: 34
+      - source: server7
+        destination: ocs_edge
+        sourcePorts: 145
+        destinationPorts: 35
+      - source: server8
+        destination: ocs_edge
+        sourcePorts: 146
+        destinationPorts: 36
+      - source: server9
+        destination: ocs_edge
+        sourcePorts: 147
+        destinationPorts: 37
+      - source: server10
+        destination: ocs_edge
+        sourcePorts: 148
+        destinationPorts: 38
+      - source: server11
+        destination: ocs_edge
+        sourcePorts: 149
+        destinationPorts: 39
+    tor:
+      - device: switch1
+        tors:
+          - name: tor1
+            ports: 26:28,36
+          - name: tor2
+            ports: 29:31,39
+      - device: switch2
+        tors:
+          - name: tor3
+            ports: 26:28,35,36
+          - name: tor4
+            ports: 29:31,40
+    ocs:
+      - device: ocs
+        sections:
+          - name: ocs_edge
+            ports: 2:7,34:39,70:75,62:67
+            sourcePorts: 2:7,34:39
+            destinationPorts: 70:75,62:67
+          - name: ocs_core
+            ports: 10,13,25,26,30
+            sourcePorts: 25,26
+            destinationPorts: 13,30
+logger: # Log output settings
+  enable: true # true or false
+  level: info # Trace levels: trace, debug, info, warn, error, fatal, panic
+  reportCaller: false # Enable the caller report: true or false

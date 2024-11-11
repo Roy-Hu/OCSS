@@ -42,7 +42,11 @@ func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*Sy
 	sys.SetLogEnable(cfg.GetLogEnable())
 	sys.SetLogLevel(cfg.GetLogLevel())
 	sys.SetReportCaller(cfg.GetLogReportCaller())
-	ocss_context.Init()
+	err := ocss_context.Init()
+	if err != nil {
+		logger.MainLog.Errorf("Failed to init ocss context: %+v", err)
+		return nil, err
+	}
 
 	sys.ctx, sys.cancel = context.WithCancel(ctx)
 	sys.ocssCtx = ocss_context.GetSelf()

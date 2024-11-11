@@ -1,1 +1,3 @@
 Before using this, use arp -f /home/bold/ethers.arp to setup the arp table
+disable linkscane using ./mnt/application/client_drivshell linkscan disable to maximize throughput while chaning optical circuit
+before diable linkscan, make sure all ports are active. To do this for RDC setup, use sh ryu_backend/active_testbed_ports.sh

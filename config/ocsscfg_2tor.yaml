@@ -1,0 +1,75 @@
+ocssName: ocss # OCSS name
+configuration:
+  networkManager: 
+    packetSwitchs:
+      - device: switch1
+        id: 1
+        ports: 1,17,25,33
+      - device: switch2
+        id: 5
+        ports: 5,21,29,33
+    opticalSwitchs:
+      - device: ocs
+        ports: 1,69,16,31,37,65
+        ip: 10.224.92.88
+    servers:
+      - name: server1
+        ip: 192.168.50.111
+        port: 111
+      - name: server2
+        ip: 192.168.50.147
+        port: 147
+    links:
+      - source: server1
+        destination: switch1
+        sourcePorts: 111
+        destinationPorts: 1
+      - source: switch1
+        destination: ocs
+        sourcePorts: 17,25,33
+        destinationPorts: 1,69,16
+      - source: switch2
+        destination: ocs
+        sourcePorts: 33,29,21
+        destinationPorts: 31,65,37
+      - source: switch2
+        destination: server2
+        sourcePorts: 5
+        destinationPorts: 147
+    fowarder:
+        name: ryu
+        address: http://127.0.0.1:8010
+  user:
+    link:
+      - source: server1
+        destination: ocs_edge
+        sourcePorts: 111
+        destinationPorts: 1
+      - source: server2
+        destination: ocs_edge
+        sourcePorts: 147
+        destinationPorts: 37
+    tor:
+      - device: switch1
+        tors:
+          - name: tor1
+            ports: 25,33
+      - device: switch2
+        tors:
+          - name: tor2
+            ports: 29,33
+    ocs:
+      - device: ocs
+        sections:
+          - name: ocs_edge
+            ports: 1,37,69,65
+            sourcePorts: 1,37
+            destinationPorts: 69,65
+          - name: ocs_core
+            ports: 16,31 
+            sourcePorts: 16
+            destinationPorts: 31
+logger: # Log output settings
+  enable: true # true or false
+  level: info # Trace levels: trace, debug, info, warn, error, fatal, panic
+  reportCaller: false # Enable the caller report: true or false

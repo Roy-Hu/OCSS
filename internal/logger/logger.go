@@ -16,6 +16,8 @@ var (
 	ServerLog    *logrus.Entry
 	ProcessorLog *logrus.Entry
 	StateLog     *logrus.Entry
+	SwitchLog    *logrus.Entry
+	ActionLog    *logrus.Entry
 )
 
 func init() {
@@ -35,4 +37,6 @@ func init() {
 	ProcessorLog = NfLog.WithField(logger_util.FieldCategory, "Processor")
 	ServerLog = NfLog.WithField(logger_util.FieldCategory, "Server")
 	StateLog = NfLog.WithField(logger_util.FieldCategory, "State")
+	SwitchLog = NfLog.WithField(logger_util.FieldCategory, "Switch")
+	ActionLog = NfLog.WithField(logger_util.FieldCategory, "Action")
 }

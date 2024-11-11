@@ -7,7 +7,7 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.app.wsgi import WSGIApplication
-
+from datetime import datetime
 import logging
 import copy
 from ofdpa.config_parser import ConfigParser
@@ -69,6 +69,7 @@ class RDC(app_manager.RyuApp):
         self.forwardingTableWithIp = {}
         self.hostPorts = {}
         self.switchPorts = {}
+        self.connectionObj = None
         
         wsgi = kwargs['wsgi']
         wsgi.register(RDCController, {rdc_instance_name: self})
@@ -92,10 +93,6 @@ class RDC(app_manager.RyuApp):
 
         template_vlan_untagged = "%s/%s.json" % (config_dir, "template_vlan_untagged")
         self.configVlanUnTagged = ConfigParser.get_config(template_vlan_untagged)
-
-        template_acl_arp_multicast_filename = "%s/%s.json" % (config_dir, "template_acl_arp_multicast")
-        self.config_acl_arp_multicast = ConfigParser.get_config(template_acl_arp_multicast_filename)
-  
     def create_group_l2_interface(self, template, dp, vlan, outputPort):
         LOG.info("Create Group L2 Interface for dpid %d port %d", dp.id, outputPort)
         group_l2_interface = copy.deepcopy(template)
@@ -256,8 +253,12 @@ class RDC(app_manager.RyuApp):
         
         LOG.info("In Port: %s", self.ocs_in_port)
         LOG.info("Out Port: %s", self.ocs_out_port)
-        connectionObj = GxcConnections(Options())
-        connectionObj.ent_crs_fiber(self.ocs_in_port, self.ocs_out_port)
-
+        if self.connectionObj is None:
+            self.connectionObj = GxcConnections(Options())
+        
+        starttime = datetime.now()
+        self.connectionObj.ent_crs_fiber(self.ocs_in_port, self.ocs_out_port)
+        LOG.info("Time taken: %s", datetime.now() - starttime)
+        
         self.ocs_in_port = []
         self.ocs_out_port = []

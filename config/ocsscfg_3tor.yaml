@@ -1,0 +1,152 @@
+ocssName: ocss # OCSS name
+configuration:
+  networkManager: 
+    packetSwitchs:
+      - name: switch1
+        id: 1
+        ports: 5:7,21:23,29:31,38:40
+      - name: switch2
+        id: 5
+        ports: 1:3,17:19,25:27,35:37,5:7,21:23,29:31,33,39,40
+    opticalSwitchs:
+      - name: ocs
+        ports: 5:7,33:35,37:39,73:75,61:63,65:67,12:14,25:27,29:31
+        ip: 10.224.92.88
+    servers:
+      - name: server1
+        ip: 192.168.50.115
+        port: 115
+      - name: server2
+        ip: 192.168.50.116
+        port: 116
+      - name: server3
+        ip: 192.168.50.117
+        port: 117
+      - name: server4
+        ip: 192.168.50.143
+        port: 143
+      - name: server5
+        ip: 192.168.50.144
+        port: 144
+      - name: server6
+        ip: 192.168.50.145
+        port: 145
+      - name: server7
+        ip: 192.168.50.147
+        port: 147
+      - name: server8
+        ip: 192.168.50.148
+        port: 148
+      - name: server9
+        ip: 192.168.50.149
+        port: 149
+    links:
+      - source: server1
+        destination: switch1
+        sourcePorts: 115
+        destinationPorts: 5
+      - source: server2
+        destination: switch1
+        sourcePorts: 116
+        destinationPorts: 6
+      - source: server3
+        destination: switch1
+        sourcePorts: 117
+        destinationPorts: 7
+      - source: server4
+        destination: switch2
+        sourcePorts: 143
+        destinationPorts: 1
+      - source: server5
+        destination: switch2
+        sourcePorts: 144
+        destinationPorts: 2
+      - source: server6
+        destination: switch2
+        sourcePorts: 145
+        destinationPorts: 3
+      - source: server7
+        destination: switch2
+        sourcePorts: 147
+        destinationPorts: 5
+      - source: server8
+        destination: switch2
+        sourcePorts: 148
+        destinationPorts: 6
+      - source: server9
+        destination: switch2
+        sourcePorts: 149
+        destinationPorts: 7
+      - source: switch1
+        destination: ocs
+        sourcePorts: 21:23,29:31,38:40
+        destinationPorts: 5:7,73:75,12:14
+      - source: switch2
+        destination: ocs
+        sourcePorts: 21:23,17:19,25:27,29:31,35:37,33,39,40
+        destinationPorts: 37:39,33:35,61:63,65:67,25:27,31,29,30
+    fowarder:
+        name: ryu
+        address: http://127.0.0.1:8010
+  user:
+    link:
+      - source: server1
+        destination: ocs_edge
+        sourcePorts: 115
+        destinationPorts: 5
+      - source: server2
+        destination: ocs_edge
+        sourcePorts: 116
+        destinationPorts: 6
+      - source: server3
+        destination: ocs_edge
+        sourcePorts: 117
+        destinationPorts: 7
+      - source: server4
+        destination: ocs_edge
+        sourcePorts: 143
+        destinationPorts: 33
+      - source: server5
+        destination: ocs_edge
+        sourcePorts: 144
+        destinationPorts: 34
+      - source: server6
+        destination: ocs_edge
+        sourcePorts: 145
+        destinationPorts: 35
+      - source: server7
+        destination: ocs_edge
+        sourcePorts: 147
+        destinationPorts: 37
+      - source: server8
+        destination: ocs_edge
+        sourcePorts: 148
+        destinationPorts: 38
+      - source: server9
+        destination: ocs_edge
+        sourcePorts: 149
+        destinationPorts: 39
+    tor:
+      - name: switch1
+        tors:
+          - name: tor1
+            ports: 29:31,38:40
+      - name: switch2
+        tors:
+          - name: tor2
+            ports: 25:27,35:37
+          - name: tor3
+            ports: 29:31,33,39,40
+    ocs:
+      - name: ocs
+        sections:
+          - name: ocs_edge
+            sourcePorts: 5:7,33:35,37:39
+            destinationPorts: 73:75,61:63,65:67
+          - name: ocs_core
+            sourcePorts: 12,13,26
+            destinationPorts: 25,31,29
+logger: # Log output settings
+  enable: true # true or false
+  level: info # Trace levels: trace, debug, info, warn, error, fatal, panic
+  reportCaller: false # Enable the caller report: true or false
