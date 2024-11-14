@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/comp590/ocss/internal/logger"
 	"github.com/comp590/ocss/pkg/app"
 )
 
@@ -50,23 +51,8 @@ func (f *Forwarder) SetOCS(ip string, ocs_in_port []int, ocs_out_port []int) err
 	return f.postJSON(endpoint, data)
 }
 
-// SetForwardingTable sends forwarding table entries to the RDC
-func (f *Forwarder) SetForwardingTable(dpid int, in_port []int, out_port []int) error {
-	entries := make([][]int, len(in_port))
-	for i := range in_port {
-		entries[i] = []int{in_port[i], out_port[i]}
-	}
-	dpidStr := fmt.Sprintf("%016x", dpid)
-	endpoint := fmt.Sprintf("/rdc/forwardingtable/%s", dpidStr)
-
-	data := map[string]interface{}{
-		"entries": entries, // Each entry is [in_port, out_port]
-	}
-	return f.postJSON(endpoint, data)
-}
-
-// SetForwardingTableWithIp sends forwarding table entries with IP addresses to the RDC
-func (f *Forwarder) SetForwardingTableWithIp(dpid int, in_port []int, out_port []int, ips []string) error {
+// CreateForwardingTable sends forwarding table entries with IP addresses to the RDC
+func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []int, ips []string) error {
 	if len(in_port) != len(out_port) || len(in_port) != len(ips) {
 		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
 	}
@@ -82,24 +68,77 @@ func (f *Forwarder) SetForwardingTableWithIp(dpid int, in_port []int, out_port [
 		"entries": entries,
 	}
 	dpidStr := fmt.Sprintf("%016x", dpid)
-	endpoint := fmt.Sprintf("/rdc/forwardingtablewithip/%s", dpidStr)
+	endpoint := fmt.Sprintf("/rdc/createforwardingtable/%s", dpidStr)
 	return f.postJSON(endpoint, data)
 }
 
-// Helper method to send POST requests with JSON data
+// CreateForwardingTable sends forwarding table entries with IP addresses to the RDC
+func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []int, ips []string) error {
+	if len(in_port) != len(out_port) || len(in_port) != len(ips) {
+		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
+	}
+	entries := make([]map[string]interface{}, len(in_port))
+	for i := range in_port {
+		entries[i] = map[string]interface{}{
+			"in_port":  in_port[i],
+			"out_port": out_port[i],
+			"ip":       ips[i],
+		}
+	}
+	data := map[string]interface{}{
+		"entries": entries,
+	}
+	dpidStr := fmt.Sprintf("%016x", dpid)
+	endpoint := fmt.Sprintf("/rdc/updateforwardingtable/%s", dpidStr)
+	return f.putJSON(endpoint, data)
+}
+
+// postJSON sends a POST request with JSON data
 func (f *Forwarder) postJSON(endpoint string, data interface{}) error {
+	return f.sendJSONRequest(http.MethodPost, endpoint, data)
+}
+
+// putJSON sends a PUT request with JSON data
+func (f *Forwarder) putJSON(endpoint string, data interface{}) error {
+	return f.sendJSONRequest(http.MethodPut, endpoint, data)
+}
+
+// sendJSONRequest is a generalized helper method to send HTTP requests with JSON data
+func (f *Forwarder) sendJSONRequest(method, endpoint string, data interface{}) error {
+	// Construct the full URL
 	url := f.RDCAddress + endpoint
+
+	// Marshal the data into JSON
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal JSON data: %v", err)
 	}
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+
+	// Create a new HTTP request with the specified method and JSON data
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return err
+		logger.ProcessorLog.Errorf("failed to create %s request: %v", method, err)
+		return fmt.Errorf("failed to create %s request: %v", method, err)
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Initialize the HTTP client (you can customize the client if needed)
+	client := &http.Client{}
+
+	// Send the HTTP request
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.ProcessorLog.Errorf("failed to create %s request: %v", method, err)
+		return fmt.Errorf("failed to send %s request: %v", method, err)
 	}
 	defer resp.Body.Close()
+
+	// Check for successful status codes (200 OK or 202 Accepted)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("HTTP request failed with status %s", resp.Status)
+		logger.ProcessorLog.Errorf("failed to create %s request: %v", method, err)
+		return fmt.Errorf("HTTP %s request failed with status: %s", method, resp.Status)
 	}
 
 	return nil

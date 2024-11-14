@@ -8,48 +8,13 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.app.wsgi import WSGIApplication
 from datetime import datetime
-import logging
 import copy
 from ofdpa.config_parser import ConfigParser
 from ofdpa.mods import Mods
-from utils import PrintConnections
+from ryu.lib import hub
 
-from rdc_rest import RDCController
+from ryu_backend.router import RDCController
 from log import LOG
-
-# switch_ids = {1, 5}
-
-# ocs_in_port = [1, 9, 37]
-# ocs_out_port = [69, 31, 65]
-
-# # fowardingTable[id] = [[in_port, out_port]]
-# fowardingTable = {
-#     1: [[1, 17]],
-#     5: [[5, 21]],
-# }
-
-# # fowardingTableWithIp[id][in_port, out_port] = IpAddress
-# forwardingTableWithIp = {
-#     1: {
-#         (25, 35): "192.168.50.147",
-#         (35, 25): "192.168.50.111",
-#     },
-#     5: {
-#         (29, 33): "192.168.50.111",
-#         (33, 29): "192.168.50.147",
-#     }
-# }
-
-# # SwitchHostPorts[id] = [hostPorts, ...]
-# hostPorts = {
-#     1: [1],
-#     5: [5],
-# }
-
-# switchPorts = {
-#     1: [17, 25, 35],
-#     5: [21, 29, 33],
-# }
 
 rdc_instance_name = 'rdc_app'
 
@@ -61,14 +26,11 @@ class RDC(app_manager.RyuApp):
         super(RDC, self).__init__(*args, **kwargs)
         LOG.info("RDC Init")
 
+        self.CREATE = "create"
+        self.UPDATE = "update"
+        DEFAULT_VLAN = 10
+
         self.dataPaths = {}
-        self.switch_ids = set()  # Previously global
-        self.ocs_in_port = []
-        self.ocs_out_port = []
-        self.fowardingTable = {}
-        self.forwardingTableWithIp = {}
-        self.hostPorts = {}
-        self.switchPorts = {}
         self.connectionObj = None
         
         wsgi = kwargs['wsgi']
@@ -144,13 +106,12 @@ class RDC(app_manager.RyuApp):
         self.install_flow_mod(dp, acl_unicast)
         return
 
-    def create_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, priority=3):
-        LOG.info("Create ACL Unicast port %d -> %d, IP %s", inPort, outputPort, ip)
+    def set_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, cmd, priority=3):
         acl_unicast = copy.deepcopy(self.configVlanInPortDesIP)
         queue = 1
         acl_unicast['flow_mod']['_name'] += str(vlan) + '_' + str(inPort) + '_' + ip + '_' + str(outputPort)
         acl_unicast['flow_mod']['priority'] += str(priority)
-        acl_unicast['flow_mod']['cmd'] = 'add'
+        acl_unicast['flow_mod']['cmd'] = cmd
         acl_unicast['flow_mod']['match']['vlan_vid'] += str(vlan)
         acl_unicast['flow_mod']['match']["in_port"] += str(inPort)
         acl_unicast['flow_mod']['match']['ipv4_dst'] += ip
@@ -159,13 +120,20 @@ class RDC(app_manager.RyuApp):
 
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
- 
+    
+    def create_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, priority=3):
+        LOG.info("Create ACL Unicast port %d -> %d, IP %s", inPort, outputPort, ip)
+        return self.set_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, ip, outputPort, 'add', priority)
 
-    def createGroupInterfaces(self, dp, vlan=10):
+    def update_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, priority=3):
+        LOG.info("Update ACL Unicast port %d -> %d, IP %s", inPort, outputPort, ip)
+        return self.set_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, ip, outputPort, 'mod', priority)
+    
+    def createGroupInterfaces(self, dp, hostPorts, switchPorts, vlan=10):
         LOG.info("Create Group Interface for ports")
-        for port in self.hostPorts[dp.id]:
+        for port in hostPorts:
             self.create_group_l2_interface(self.groupConfigPopVlan, dp, vlan, port)
-        for port in self.switchPorts[dp.id]:
+        for port in switchPorts:
             self.create_group_l2_interface(self.groupConfig, dp, vlan, port)
 
     def create_vlan(self, dp, vlan, inPort):
@@ -184,47 +152,31 @@ class RDC(app_manager.RyuApp):
         
         return
 
-    def tagVlan(self, dp, vlan=10):
+    def tagVlan(self, dp, ports, vlan=10):
         LOG.info("Tag Vlan")
         # TODO
-        for inPort in range(1, 42):
+        for inPort in ports:
             self.create_vlan(dp, vlan, inPort)
 
-    def init_switch(self, dp, vlan = 10):
-        self.createGroupInterfaces(dp, vlan)
-        self.tagVlan(dp, vlan)
+    def init_switch(self, dpid, hostPorts, switchPorts, vlan = 10):
+        dp = self.dataPaths[dpid]
+        self.createGroupInterfaces(dp, hostPorts, switchPorts, vlan)
+        self.tagVlan(dp, hostPorts + switchPorts, vlan)
 
-    def build_packets(self, dp, dpid):
+    def build_packets(self, dp, dpid, forwardingTable, cmd, vlan = 10):
         LOG.info("Build Packets for Swiich %d", dpid)
         
-        if dpid in self.switch_ids:
-            defaultVlan = 10
-            # self.create_acl_arp_flood(dp, defaultVlan)
-            in_ports = []
-            out_ports = []
-            
-            for inPort, outPort in self.fowardingTable[dpid]:
-                in_ports += [inPort]
-                out_ports += [outPort]
-                self.create_acl_unicast_vlan_inPort(dp, defaultVlan, inPort, outPort)
-                self.create_acl_unicast_vlan_inPort(dp, defaultVlan, outPort, inPort)
-            
-            self.fowardingTable[dpid] = []
-            # PrintConnections(LOG, in_ports, out_ports)
-            
-            in_ports = []
-            out_ports = []
-            
-            for dpid, ports in self.forwardingTableWithIp.items():
-                if dpid != dp.id:
-                    continue
-                for (inPort, outPort), dstIp in ports.items():
-                    in_ports = []
-                    out_ports = []
-                    self.create_acl_unicast_vlan_inPort_dstIp(dp, defaultVlan, inPort, dstIp, outPort)
-                    
-            self.forwardingTableWithIp = {}
-            # PrintConnections(LOG, in_ports, out_ports)
+        for (inPort, dstIp), outPort in forwardingTable.items():
+            if cmd == self.CREATE:
+                if dstIp == "":
+                    self.create_acl_unicast_vlan_inPort(dp, vlan, inPort, outPort)
+                    self.create_acl_unicast_vlan_inPort(dp, vlan, outPort, inPort)
+                else:
+                    self.create_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, dstIp, outPort)
+            elif cmd == self.UPDATE:
+                self.update_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, dstIp, outPort)
+            else:
+                raise Exception("Invalid Command")     
         
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def handler_datapath(self, ev):
@@ -244,21 +196,19 @@ class RDC(app_manager.RyuApp):
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
         LOG.info("Packet in on DPID %s (port %s): %s", datapath.id, in_port, eth)
+
+    def run_OCS_create_initial_connections(self, ocs_in_port, ocs_out_port):
+        hub.spawn(self.OCS_create_initial_connections, ocs_in_port, ocs_out_port)
         
-    def OCS_create_initial_connections(self):
+    def OCS_create_initial_connections(self, ocs_in_port, ocs_out_port):
         from OCSRelated.connections import GxcConnections
         from OCSRelated.optionsForShareBackup import Options
         LOG.info("OCS_create_initial_connections")
         # PrintConnections(LOG, self.ocs_in_port, self.ocs_out_port)
         
-        LOG.info("In Port: %s", self.ocs_in_port)
-        LOG.info("Out Port: %s", self.ocs_out_port)
+        LOG.info("In Port: %s", ocs_in_port)
+        LOG.info("Out Port: %s", ocs_out_port)
         if self.connectionObj is None:
             self.connectionObj = GxcConnections(Options())
         
-        starttime = datetime.now()
-        self.connectionObj.ent_crs_fiber(self.ocs_in_port, self.ocs_out_port)
-        LOG.info("Time taken: %s", datetime.now() - starttime)
-        
-        self.ocs_in_port = []
-        self.ocs_out_port = []
+        self.connectionObj.ent_crs_fiber(ocs_in_port, ocs_out_port)

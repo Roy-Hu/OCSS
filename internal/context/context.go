@@ -20,6 +20,14 @@ const (
 	OPTICAL_SWITCH DeviceType = "OPTICAL_SWITCH"
 )
 
+type RULE_STATUS string
+
+const (
+	CREATE RULE_STATUS = "CREATE"
+	UPDATE RULE_STATUS = "UPDATE"
+	ACTIVE RULE_STATUS = "ACTIVE"
+)
+
 type OCSSContext struct {
 	Switches   map[string]*Switch
 	Servers    map[string]*Server
@@ -39,7 +47,7 @@ type Forward struct {
 	SrcPort  int
 	DestPort int
 	Ip       string
-	Init     bool
+	Status   RULE_STATUS
 }
 
 type Server struct {

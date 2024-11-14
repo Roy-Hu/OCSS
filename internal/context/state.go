@@ -66,7 +66,7 @@ func SetupStates(user *UserView) map[string]*State {
 	states["State1"] = &State{
 		Triggers: []func(ctx context.Context) bool{
 			func(ctx context.Context) bool {
-				ticker := time.NewTicker(500 * time.Millisecond)
+				ticker := time.NewTicker(2000 * time.Millisecond)
 				defer ticker.Stop()
 
 				select {
@@ -78,7 +78,7 @@ func SetupStates(user *UserView) map[string]*State {
 			},
 		},
 		Actions: []func() string{
-			MyActions["2ToR"],
+			MyActions["4ToR"],
 		},
 		InitState: true,
 	}

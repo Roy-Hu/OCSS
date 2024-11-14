@@ -351,37 +351,54 @@ func (p *Processor) setupForwardingTable() {
 		in_port := make([]int, 0)
 		out_port := make([]int, 0)
 
-		in_port_ip := make([]int, 0)
-		out_port_ip := make([]int, 0)
-		ips := make([]string, 0)
+		create_in_port_ip := make([]int, 0)
+		create_out_port_ip := make([]int, 0)
+		create_ips := make([]string, 0)
+
+		update_in_port_ip := make([]int, 0)
+		update_out_port_ip := make([]int, 0)
+		update_ips := make([]string, 0)
 
 		for _, rule := range sw.ForwardingRule {
-			if !rule.Init {
+			if rule.Status == ocss_context.ACTIVE {
 				continue
+			} else if rule.Status == ocss_context.CREATE {
+				if rule.Ip != "" {
+					create_in_port_ip = append(create_in_port_ip, rule.SrcPort)
+					create_out_port_ip = append(create_out_port_ip, rule.DestPort)
+					create_ips = append(create_ips, rule.Ip)
+				} else {
+					in_port = append(in_port, rule.SrcPort)
+					out_port = append(out_port, rule.DestPort)
+				}
+			} else if rule.Status == ocss_context.UPDATE {
+				if rule.Ip != "" {
+					update_in_port_ip = append(update_in_port_ip, rule.SrcPort)
+					update_out_port_ip = append(update_out_port_ip, rule.DestPort)
+					update_ips = append(update_ips, rule.Ip)
+				}
 			}
 
-			if rule.Ip != "" {
-				in_port_ip = append(in_port_ip, rule.SrcPort)
-				out_port_ip = append(out_port_ip, rule.DestPort)
-				ips = append(ips, rule.Ip)
-			} else {
-				in_port = append(in_port, rule.SrcPort)
-				out_port = append(out_port, rule.DestPort)
-			}
-
-			rule.Init = false
+			rule.Status = ocss_context.ACTIVE
 		}
 
 		if len(in_port) != 0 && len(out_port) != 0 {
 			logger.ProcessorLog.Infof("Forwarding Table: %d, %v, %v", sw.Id, in_port, out_port)
+			empty_ips := make([]string, len(in_port))
 
-			forwarder.SetForwardingTable(sw.Id, in_port, out_port)
+			forwarder.CreateForwardingTable(sw.Id, in_port, out_port, empty_ips)
 		}
 
-		if len(in_port_ip) != 0 && len(out_port_ip) != 0 {
-			logger.ProcessorLog.Infof("Forwarding Table with IP: %d, %v, %v, %v", sw.Id, in_port_ip, out_port_ip, ips)
+		if len(create_in_port_ip) != 0 && len(create_out_port_ip) != 0 {
+			logger.ProcessorLog.Infof("Create Forwarding Table with IP: %d, %v, %v, %v", sw.Id, create_in_port_ip, create_out_port_ip, create_ips)
 
-			forwarder.SetForwardingTableWithIp(sw.Id, in_port_ip, out_port_ip, ips)
+			forwarder.CreateForwardingTable(sw.Id, create_in_port_ip, create_out_port_ip, create_ips)
+		}
+
+		if len(update_in_port_ip) != 0 && len(update_out_port_ip) != 0 {
+			logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, %v, %v, %v", sw.Id, update_in_port_ip, update_out_port_ip, update_ips)
+
+			forwarder.UpdateForwardingTable(sw.Id, update_in_port_ip, update_out_port_ip, update_ips)
 		}
 	}
 
