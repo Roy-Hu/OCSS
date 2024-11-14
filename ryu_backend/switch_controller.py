@@ -201,8 +201,8 @@ class RDC(app_manager.RyuApp):
         hub.spawn(self.OCS_create_initial_connections, ocs_in_port, ocs_out_port)
         
     def OCS_create_initial_connections(self, ocs_in_port, ocs_out_port):
-        from OCSRelated.connections import GxcConnections
-        from OCSRelated.optionsForShareBackup import Options
+        from ocs.connections import GxcConnections
+        from ocs.optionsForShareBackup import Options
         LOG.info("OCS_create_initial_connections")
         # PrintConnections(LOG, self.ocs_in_port, self.ocs_out_port)
         
