@@ -52,8 +52,8 @@ func (f *Forwarder) SetOCS(ip string, ocs_in_port []int, ocs_out_port []int) err
 }
 
 // CreateForwardingTable sends forwarding table entries with IP addresses to the RDC
-func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []int, ips []string) error {
-	if len(in_port) != len(out_port) || len(in_port) != len(ips) {
+func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
+	if len(in_port) != len(out_port) || len(in_port) != len(src_ips) || len(in_port) != len(dst_ips) {
 		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
 	}
 	entries := make([]map[string]interface{}, len(in_port))
@@ -61,7 +61,8 @@ func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []in
 		entries[i] = map[string]interface{}{
 			"in_port":  in_port[i],
 			"out_port": out_port[i],
-			"ip":       ips[i],
+			"src_ip":   src_ips[i],
+			"dst_ip":   dst_ips[i],
 		}
 	}
 	data := map[string]interface{}{
@@ -73,8 +74,8 @@ func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []in
 }
 
 // CreateForwardingTable sends forwarding table entries with IP addresses to the RDC
-func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []int, ips []string) error {
-	if len(in_port) != len(out_port) || len(in_port) != len(ips) {
+func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
+	if len(in_port) != len(out_port) || len(in_port) != len(src_ips) || len(in_port) != len(dst_ips) {
 		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
 	}
 	entries := make([]map[string]interface{}, len(in_port))
@@ -82,7 +83,8 @@ func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []in
 		entries[i] = map[string]interface{}{
 			"in_port":  in_port[i],
 			"out_port": out_port[i],
-			"ip":       ips[i],
+			"src_ip":   src_ips[i],
+			"dst_ip":   dst_ips[i],
 		}
 	}
 	data := map[string]interface{}{

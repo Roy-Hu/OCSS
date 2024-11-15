@@ -110,7 +110,7 @@ class Options:
         )
 
         # configuration file name
-        config_file = os.getcwd()+"/OCSRelated/ocsControlInfo.txt"
+        config_file = os.getcwd()+"/ocs/ocsControlInfo.txt"
         #config_file = tl1_root_path + "/config" + "/config.txt"
 
         # Or the user may specify another

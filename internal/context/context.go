@@ -46,7 +46,8 @@ type Forward struct {
 	Device   string
 	SrcPort  int
 	DestPort int
-	Ip       string
+	DstIp    string
+	SrcIp    string
 	Status   RULE_STATUS
 }
 
@@ -396,11 +397,11 @@ func PrintFowardingRule() {
 				rules[f.Device][f.SrcPort] = make(map[int][]string)
 			}
 
-			if f.Ip == "" {
+			if f.DstIp == "" {
 				continue
 			}
 
-			rules[f.Device][f.SrcPort][f.DestPort] = append(rules[f.Device][f.SrcPort][f.DestPort], f.Ip)
+			rules[f.Device][f.SrcPort][f.DestPort] = append(rules[f.Device][f.SrcPort][f.DestPort], f.DstIp)
 		}
 	}
 

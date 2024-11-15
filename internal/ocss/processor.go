@@ -98,7 +98,7 @@ func (p *Processor) CreateForwardingTables() error {
 
 							// the in port connects to the server and the out port connects to the ocs beed to be treated as a psycial link
 
-							sw.AddForwardingRule(in_port, out_port, "")
+							sw.AddForwardingRule(in_port, out_port, "", "")
 
 							// server - > sw in port -> sw out port -> ocs in port share the same sever pointer
 							// since we logically connect the server to the ocs
@@ -210,8 +210,10 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 				logger.ProcessorLog.Infof("OCS [%s] Connection Port [%d](Connect to %s %d) <-> Port [%d](Connect to %s %d)",
 					ocs.Name, inPort, ocs.PortConnToMap[inPort].Name, ocs.PortConnToMap[inPort].Port, outPort, ocs.PortConnToMap[outPort].Name, ocs.PortConnToMap[outPort].Port)
 
-				// setup foward rule from ocs -> tor -> server
 				ports := []int{inPort, outPort}
+				tors := []*ocss_context.ToR{}
+				tor_servers := [][]string{}
+				conn_to_ocs_port := []int{}
 				for _, port := range ports {
 					connTo := ocs.PortConnToMap[port]
 					device := connTo.Device
@@ -219,6 +221,7 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 					// ocs in/out port connects to a switch
 					if self.DeviceType[device] == ocss_context.SWITCH {
 						sw_port := connTo.Port
+						conn_to_ocs_port = append(conn_to_ocs_port, sw_port)
 						// Find the tor that connects to the ocs in/out port
 						tor := self.UserView.FindToRByDeviceAndPort(device, sw_port)
 						if tor == nil {
@@ -226,73 +229,38 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 							continue
 						}
 
-						for dst_port, dst_connTo := range tor.PortConnToMap {
-							// skip the tor port that connects to the current ocs in/out port
-							if dst_port == sw_port {
-								continue
-							}
-
-							// May delete?
-							// dst_port and sw_port connects to the same ocs, skip
-							if ocs.HavePort(dst_connTo.Port) {
-								logger.ProcessorLog.Debugf("%s Port [%d] and Port [%d] both connect to OCS [%s], skip ", tor.Name, connTo.Device, dst_port, sw_port, ocs.Name)
-								continue
-							}
-
-							sw := self.Switches[device]
-							// since the tor port connects to the ocs port, the tor port should also connect to the server
-							tor.PortServerConn[sw_port].AddConnServerInfo(tor.PortServerConn[dst_port])
-
-							// Add forwarding rule for the sw_port ->  dst_port, ip: dst_port.Servers.ip
-							for server, ok := range tor.PortServerConn[dst_port].Server {
-								if ok {
-									sw.AddForwardingRule(sw_port, dst_port, self.Servers[server].Ip)
-									logger.ProcessorLog.Infof("tor [%s] Port [%d] -> Port [%d], Server [%s]", tor.Name, sw_port, dst_port, server)
-								}
-							}
-						}
-					} else {
-						logger.ProcessorLog.Errorf("Currently OCS port %d should connect to a switch instead of %s", port, device)
+						tors = append(tors, tor)
+						tor_servers = append(tor_servers, tor.ConnectedServers())
 					}
 				}
 
-				// setup foward rule from server -> tor -> ocs
-				// currently, we want to setup the forwarding rule from server -> dst tor -> ocs -> src tor
-				for i, _ := range ports {
-					srcConnTo := ocs.PortConnToMap[ports[i]]
-					dstConnTo := ocs.PortConnToMap[ports[1-i]]
-					dstPort := dstConnTo.Port
-					dstDevice := dstConnTo.Device
+				for i := range 2 {
+					src_tor := tors[i]
+					dst_tor := tors[1-i]
+					dst_tor_servers := tor_servers[1-i]
+					tor_ocs_port := conn_to_ocs_port[i]
 
-					// find the tor that connects to the ocs src port
-					srcTor := self.UserView.FindToRByDeviceAndPort(srcConnTo.Device, srcConnTo.Port)
-					// find the servers that src tor can connect to
-					srcServers := srcTor.PortServerConn[srcConnTo.Port].Server
-
-					// TODO: What if OCS connected to another OCS?
-					if self.DeviceType[dstDevice] == ocss_context.SWITCH {
-						dstTor := self.UserView.FindToRByDeviceAndPort(dstDevice, dstPort)
-						if dstTor == nil {
-							logger.ProcessorLog.Errorf("Switch [%s] Port [%d] is not a ToR", dstDevice, dstPort)
+					for tor_server_port, tor_connTo := range src_tor.PortConnToMap {
+						if tor_server_port == tor_ocs_port {
 							continue
-						}
-
-						for sw_port, sw_connTo := range dstTor.PortConnToMap {
-							if sw_port == dstPort {
-								continue
-							}
-
-							if ocs.HavePort(sw_connTo.Port) {
-								logger.ProcessorLog.Debugf("Switch [%s] Port [%d] and Port [%d] both connect to OCS [%s], skip ", dstDevice, sw_port, dstPort, ocs.Name)
-								continue
-							}
-
-							sw := self.Switches[dstDevice]
-
-							for server, ok := range srcServers {
+						} else if ocs.HavePort(tor_connTo.Port) {
+							logger.ProcessorLog.Debugf("[%s] Port [%d] and Port [%d] both connect to OCS [%s], skip ", src_tor.Name, tor_server_port, tor_ocs_port, ocs.Name)
+							continue
+						} else {
+							src_servers := src_tor.PortServerConn[tor_server_port].Server
+							for src_server, ok := range src_servers {
 								if ok {
-									sw.AddForwardingRule(sw_port, dstPort, self.Servers[server].Ip)
-									logger.ProcessorLog.Infof("Switch [%s] Port [%d] -> Port [%d], Server [%s] ", dstDevice, sw_port, dstPort, server)
+									src_server_ip := self.Servers[src_server].Ip
+									for _, dst_server := range dst_tor_servers {
+										dst_server_ip := self.Servers[dst_server].Ip
+										// src server -> src tor -> ocs -> dst tor -> dst server
+										self.Switches[src_tor.Device].AddForwardingRule(tor_server_port, tor_ocs_port, src_server_ip, dst_server_ip)
+										logger.ProcessorLog.Infof("Server[%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[src_server].Ip, src_tor.Name, tor_server_port, tor_ocs_port, dst_server_ip)
+
+										// dst server -> dst tor -> ocs -> src tor -> src server
+										self.Switches[dst_tor.Device].AddForwardingRule(tor_ocs_port, tor_server_port, dst_server_ip, src_server_ip)
+										logger.ProcessorLog.Infof("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[dst_server].Ip, src_tor.Name, tor_ocs_port, tor_server_port, src_server_ip)
+									}
 								}
 							}
 						}
@@ -353,29 +321,33 @@ func (p *Processor) setupForwardingTable() {
 
 		create_in_port_ip := make([]int, 0)
 		create_out_port_ip := make([]int, 0)
-		create_ips := make([]string, 0)
+		create_src_ips := make([]string, 0)
+		create_dst_ips := make([]string, 0)
 
 		update_in_port_ip := make([]int, 0)
 		update_out_port_ip := make([]int, 0)
-		update_ips := make([]string, 0)
+		update_src_ips := make([]string, 0)
+		update_dst_ips := make([]string, 0)
 
 		for _, rule := range sw.ForwardingRule {
 			if rule.Status == ocss_context.ACTIVE {
 				continue
 			} else if rule.Status == ocss_context.CREATE {
-				if rule.Ip != "" {
+				if rule.DstIp != "" {
 					create_in_port_ip = append(create_in_port_ip, rule.SrcPort)
 					create_out_port_ip = append(create_out_port_ip, rule.DestPort)
-					create_ips = append(create_ips, rule.Ip)
+					create_src_ips = append(create_src_ips, rule.SrcIp)
+					create_dst_ips = append(create_dst_ips, rule.DstIp)
 				} else {
 					in_port = append(in_port, rule.SrcPort)
 					out_port = append(out_port, rule.DestPort)
 				}
 			} else if rule.Status == ocss_context.UPDATE {
-				if rule.Ip != "" {
+				if rule.DstIp != "" {
 					update_in_port_ip = append(update_in_port_ip, rule.SrcPort)
 					update_out_port_ip = append(update_out_port_ip, rule.DestPort)
-					update_ips = append(update_ips, rule.Ip)
+					update_src_ips = append(update_src_ips, rule.SrcIp)
+					update_dst_ips = append(update_dst_ips, rule.DstIp)
 				}
 			}
 
@@ -386,19 +358,19 @@ func (p *Processor) setupForwardingTable() {
 			logger.ProcessorLog.Infof("Forwarding Table: %d, %v, %v", sw.Id, in_port, out_port)
 			empty_ips := make([]string, len(in_port))
 
-			forwarder.CreateForwardingTable(sw.Id, in_port, out_port, empty_ips)
+			forwarder.CreateForwardingTable(sw.Id, in_port, out_port, empty_ips, empty_ips)
 		}
 
 		if len(create_in_port_ip) != 0 && len(create_out_port_ip) != 0 {
-			logger.ProcessorLog.Infof("Create Forwarding Table with IP: %d, %v, %v, %v", sw.Id, create_in_port_ip, create_out_port_ip, create_ips)
+			logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
 
-			forwarder.CreateForwardingTable(sw.Id, create_in_port_ip, create_out_port_ip, create_ips)
+			forwarder.CreateForwardingTable(sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
 		}
 
 		if len(update_in_port_ip) != 0 && len(update_out_port_ip) != 0 {
-			logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, %v, %v, %v", sw.Id, update_in_port_ip, update_out_port_ip, update_ips)
+			logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
 
-			forwarder.UpdateForwardingTable(sw.Id, update_in_port_ip, update_out_port_ip, update_ips)
+			forwarder.UpdateForwardingTable(sw.Id, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
 		}
 	}
 

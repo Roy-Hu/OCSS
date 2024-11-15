@@ -13,21 +13,21 @@ curl -X POST http://127.0.0.1:8010/rdc/set_switch_info/0000000000000005 \
   "switchPorts": [21, 29, 33]
 }'
 
-curl -X POST http://127.0.0.1:8010/rdc/forwardingtable/0000000000000001 \
+curl -X POST http://127.0.0.1:8010/rdc/createforwardingtable/0000000000000001 \
 -H "Content-Type: application/json" \
 -d '{
   "entries": [
-    [1, 17],
-    [25, 33]
+    {"in_port": 1, "out_port": 17, "src_ip": "", "dst_ip": ""},
+    {"in_port": 25, "out_port": 33, "src_ip": "", "dst_ip": ""}
   ]
 }'
 
-curl -X POST http://127.0.0.1:8010/rdc/forwardingtable/0000000000000005 \
+curl -X POST http://127.0.0.1:8010/rdc/createforwardingtable/0000000000000005 \
 -H "Content-Type: application/json" \
 -d '{
   "entries": [
-    [5, 21],
-    [29, 33]
+    {"in_port": 5, "out_port": 21, "src_ip": "192.168.50.111", "dst_ip": "192.168.50.147"},
+    {"in_port": 29, "out_port": 33, "src_ip": "192.168.50.147", "dst_ip": "192.168.50.111"}
   ]
 }'
 

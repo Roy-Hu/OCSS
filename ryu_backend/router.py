@@ -158,10 +158,11 @@ class RDCController(ControllerBase):
         for entry in entries:
             in_port = entry.get('in_port')
             out_port = entry.get('out_port')
-            ip = entry.get('ip')
-            if in_port is None or out_port is None or ip is None:
+            src_ip = entry.get('src_ip')
+            dst_ip = entry.get('dst_ip')
+            if in_port is None or out_port is None or src_ip is None or dst_ip is None:
                 continue  # Skip invalid entries
-            forwardingTable[(in_port, ip)] = out_port
+            forwardingTable[(in_port, src_ip, dst_ip)] = out_port
 
         dp = self.rdc_app.dataPaths.get(dpid)
         if dp:

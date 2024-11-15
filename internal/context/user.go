@@ -110,3 +110,15 @@ func (t *ToR) HavePort(port int) bool {
 	}
 	return false
 }
+
+func (t *ToR) ConnectedServers() []string {
+	servers := make([]string, 0)
+	for _, conn := range t.PortServerConn {
+		for server, ok := range conn.Server {
+			if ok {
+				servers = append(servers, server)
+			}
+		}
+	}
+	return servers
+}

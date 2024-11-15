@@ -47,8 +47,8 @@ class RDC(app_manager.RyuApp):
         template_acl_unicast_vlan_inPort = "%s/%s.json" % (config_dir, "te_acl_unicast_vlan_inPort")
         self.configVlanInPort = ConfigParser.get_config(template_acl_unicast_vlan_inPort)
         
-        template_acl_unicast_vlan_inPort_desIP = "%s/%s.json" % (config_dir, "te_acl_unicast_vlan_inPort_desIP")
-        self.configVlanInPortDesIP = ConfigParser.get_config(template_acl_unicast_vlan_inPort_desIP)
+        template_acl_unicast_vlan_inPort_srcIp_desIP = "%s/%s.json" % (config_dir, "te_acl_unicast_vlan_inPort_srcIp_desIP")
+        self.configVlanInPortSrcIPDesIP = ConfigParser.get_config(template_acl_unicast_vlan_inPort_srcIp_desIP)
   
         template_vlan_tagged = "%s/%s.json" % (config_dir, "template_vlan_tagged")
         self.configVlanTagged = ConfigParser.get_config(template_vlan_tagged)
@@ -105,29 +105,29 @@ class RDC(app_manager.RyuApp):
         
         self.install_flow_mod(dp, acl_unicast)
         return
-
-    def set_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, cmd, priority=3):
-        acl_unicast = copy.deepcopy(self.configVlanInPortDesIP)
+    def set_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, cmd, priority=3):
+        acl_unicast = copy.deepcopy(self.configVlanInPortSrcIPDesIP)
         queue = 1
-        acl_unicast['flow_mod']['_name'] += str(vlan) + '_' + str(inPort) + '_' + ip + '_' + str(outputPort)
+        acl_unicast['flow_mod']['_name'] += str(vlan) + '_' + str(inPort) + '_' + srcIp + dstIp + '_' + str(outputPort)
         acl_unicast['flow_mod']['priority'] += str(priority)
         acl_unicast['flow_mod']['cmd'] = cmd
         acl_unicast['flow_mod']['match']['vlan_vid'] += str(vlan)
         acl_unicast['flow_mod']['match']["in_port"] += str(inPort)
-        acl_unicast['flow_mod']['match']['ipv4_dst'] += ip
+        acl_unicast['flow_mod']['match']['ipv4_src'] += srcIp
+        acl_unicast['flow_mod']['match']['ipv4_dst'] += dstIp
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(queue)
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (vlan, outputPort)
 
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
     
-    def create_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, priority=3):
-        LOG.info("Create ACL Unicast port %d -> %d, IP %s", inPort, outputPort, ip)
-        return self.set_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, ip, outputPort, 'add', priority)
+    def create_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
+        LOG.info("Create ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort, srcIp, dstIp)
+        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'add', priority)
 
-    def update_acl_unicast_vlan_inPort_dstIp(self, dp, vlan, inPort, ip, outputPort, priority=3):
-        LOG.info("Update ACL Unicast port %d -> %d, IP %s", inPort, outputPort, ip)
-        return self.set_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, ip, outputPort, 'mod', priority)
+    def update_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
+        LOG.info("Update ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
+        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'mod', priority)
     
     def createGroupInterfaces(self, dp, hostPorts, switchPorts, vlan=10):
         LOG.info("Create Group Interface for ports")
@@ -166,15 +166,15 @@ class RDC(app_manager.RyuApp):
     def build_packets(self, dp, dpid, forwardingTable, cmd, vlan = 10):
         LOG.info("Build Packets for Swiich %d", dpid)
         
-        for (inPort, dstIp), outPort in forwardingTable.items():
+        for (inPort, srcIp, dstIp), outPort in forwardingTable.items():
             if cmd == self.CREATE:
                 if dstIp == "":
                     self.create_acl_unicast_vlan_inPort(dp, vlan, inPort, outPort)
                     self.create_acl_unicast_vlan_inPort(dp, vlan, outPort, inPort)
                 else:
-                    self.create_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, dstIp, outPort)
+                    self.create_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
             elif cmd == self.UPDATE:
-                self.update_acl_unicast_vlan_inPort_dstIp(dp, vlan, inPort, dstIp, outPort)
+                self.update_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
             else:
                 raise Exception("Invalid Command")     
         

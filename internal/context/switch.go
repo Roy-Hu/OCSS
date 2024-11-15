@@ -14,8 +14,8 @@ type Switch struct {
 	PortServerConn map[int]*ConnServerInfo
 }
 
-func (s *Switch) AddForwardingRule(inPort int, outPort int, ip string) {
-	rule_name := getRuleName(s.Device, inPort, ip)
+func (s *Switch) AddForwardingRule(inPort int, outPort int, srcIp string, dstIp string) {
+	rule_name := getRuleName(s.Device, inPort, dstIp)
 
 	if _, ok := s.ForwardingRule[rule_name]; ok {
 		if s.ForwardingRule[rule_name].DestPort != outPort {
@@ -29,7 +29,8 @@ func (s *Switch) AddForwardingRule(inPort int, outPort int, ip string) {
 			Device:   s.Device,
 			SrcPort:  inPort,
 			DestPort: outPort,
-			Ip:       ip,
+			SrcIp:    srcIp,
+			DstIp:    dstIp,
 			Status:   CREATE,
 		}
 	}
