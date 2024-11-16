@@ -236,7 +236,6 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 
 				for i := range 2 {
 					src_tor := tors[i]
-					dst_tor := tors[1-i]
 					dst_tor_servers := tor_servers[1-i]
 					tor_ocs_port := conn_to_ocs_port[i]
 
@@ -247,6 +246,7 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 							logger.ProcessorLog.Debugf("[%s] Port [%d] and Port [%d] both connect to OCS [%s], skip ", src_tor.Name, tor_server_port, tor_ocs_port, ocs.Name)
 							continue
 						} else {
+							src_sw := self.Switches[src_tor.Device]
 							src_servers := src_tor.PortServerConn[tor_server_port].Server
 							for src_server, ok := range src_servers {
 								if ok {
@@ -254,11 +254,11 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 									for _, dst_server := range dst_tor_servers {
 										dst_server_ip := self.Servers[dst_server].Ip
 										// src server -> src tor -> ocs -> dst tor -> dst server
-										self.Switches[src_tor.Device].AddForwardingRule(tor_server_port, tor_ocs_port, src_server_ip, dst_server_ip)
+										src_sw.AddForwardingRule(tor_server_port, tor_ocs_port, src_server_ip, dst_server_ip)
 										logger.ProcessorLog.Infof("Server[%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[src_server].Ip, src_tor.Name, tor_server_port, tor_ocs_port, dst_server_ip)
 
 										// dst server -> dst tor -> ocs -> src tor -> src server
-										self.Switches[dst_tor.Device].AddForwardingRule(tor_ocs_port, tor_server_port, dst_server_ip, src_server_ip)
+										src_sw.AddForwardingRule(tor_ocs_port, tor_server_port, dst_server_ip, src_server_ip)
 										logger.ProcessorLog.Infof("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[dst_server].Ip, src_tor.Name, tor_ocs_port, tor_server_port, src_server_ip)
 									}
 								}

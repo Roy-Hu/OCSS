@@ -15,7 +15,7 @@ type Switch struct {
 }
 
 func (s *Switch) AddForwardingRule(inPort int, outPort int, srcIp string, dstIp string) {
-	rule_name := getRuleName(s.Device, inPort, dstIp)
+	rule_name := getRuleName(s.Device, inPort, outPort, srcIp, dstIp)
 
 	if _, ok := s.ForwardingRule[rule_name]; ok {
 		if s.ForwardingRule[rule_name].DestPort != outPort {
@@ -37,12 +37,12 @@ func (s *Switch) AddForwardingRule(inPort int, outPort int, srcIp string, dstIp 
 
 }
 
-func getRuleName(device string, inPort int, ip string) string {
+func getRuleName(device string, inPort int, outPort int, srcIp string, dstIp string) string {
 	var rule_name string
-	if ip == "" {
-		rule_name = fmt.Sprintf("%s_%d", device, inPort)
+	if dstIp == "" {
+		rule_name = fmt.Sprintf("%s_%d_%d", device, inPort, outPort)
 	} else {
-		rule_name = fmt.Sprintf("%s_%d_%s", device, inPort, ip)
+		rule_name = fmt.Sprintf("%s_%d_%d_%s_%s", device, inPort, outPort, srcIp, dstIp)
 	}
 
 	return rule_name
