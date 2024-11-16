@@ -64,6 +64,12 @@ class ConfigParser():
         return config["match"]
 
     @staticmethod
+    def get_cookie(config):
+        if "cookie" in config:
+            return config["cookie"]
+        return None
+        
+    @staticmethod
     def get_instr_config(config):
         if "instructions" in config:
             return config["instructions"]

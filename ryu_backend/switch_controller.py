@@ -7,7 +7,6 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.app.wsgi import WSGIApplication
-from datetime import datetime
 import copy
 from ofdpa.config_parser import ConfigParser
 from ofdpa.mods import Mods
@@ -15,6 +14,7 @@ from ryu.lib import hub
 
 from ryu_backend.router import RDCController
 from log import LOG
+from collections import defaultdict
 
 rdc_instance_name = 'rdc_app'
 
@@ -33,6 +33,10 @@ class RDC(app_manager.RyuApp):
         self.dataPaths = {}
         self.connectionObj = None
         
+        self.traffic_matrix = {}  # Key: dpid, Value: defaultdict
+        self.prev_stats = {}      # Key: dpid, Value: defaultdict
+        self.monitor_threads = {} # Key: dpid, Value: hub.spawn thread
+
         wsgi = kwargs['wsgi']
         wsgi.register(RDCController, {rdc_instance_name: self})
         
@@ -55,6 +59,7 @@ class RDC(app_manager.RyuApp):
 
         template_vlan_untagged = "%s/%s.json" % (config_dir, "template_vlan_untagged")
         self.configVlanUnTagged = ConfigParser.get_config(template_vlan_untagged)
+        
     def create_group_l2_interface(self, template, dp, vlan, outputPort):
         LOG.info("Create Group L2 Interface for dpid %d port %d", dp.id, outputPort)
         group_l2_interface = copy.deepcopy(template)
@@ -118,6 +123,8 @@ class RDC(app_manager.RyuApp):
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(queue)
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (vlan, outputPort)
 
+        acl_unicast['flow_mod']['cookie'] = '0x1234'
+        
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
     
@@ -159,10 +166,66 @@ class RDC(app_manager.RyuApp):
             self.create_vlan(dp, vlan, inPort)
 
     def init_switch(self, dpid, hostPorts, switchPorts, vlan = 10):
+        LOG.info("Initializing switch with dpid %d", dpid)
+        
         dp = self.dataPaths[dpid]
         self.createGroupInterfaces(dp, hostPorts, switchPorts, vlan)
         self.tagVlan(dp, hostPorts + switchPorts, vlan)
+        
+        self.prev_stats[dpid] = defaultdict(int)
+        self.traffic_matrix[dpid] = defaultdict(int)
+        
+        if dpid not in self.monitor_threads:
+            self.monitor_threads[dpid] = hub.spawn(self._monitor, dp)
 
+    def _monitor(self, datapath):
+        LOG.info("Starting monitoring thread for dpid %d", datapath.id)
+        while True:
+            self.request_flow_stats(datapath)
+            hub.sleep(3) 
+
+    def request_flow_stats(self, datapath):
+        LOG.info("Request flow stats for dpid %d", datapath.id)
+        parser = datapath.ofproto_parser
+
+        req=parser.OFPFlowStatsRequest(datapath)
+        
+        datapath.send_msg(req)
+
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flow_stats_reply_handler(self, ev):
+        datapath = ev.msg.datapath
+        dpid = datapath.id
+        body = ev.msg.body
+
+        if dpid not in self.prev_stats:
+            self.prev_stats[dpid] = defaultdict(int)
+        if dpid not in self.traffic_matrix:
+            self.traffic_matrix[dpid] = defaultdict(int)
+
+        for stat in body:
+            if stat.cookie != 0x1234:
+                continue
+            match = stat.match
+            byte_count = stat.byte_count
+            src_ip = match.get('ipv4_src')
+            dst_ip = match.get('ipv4_dst')
+            
+            LOG.info("Flow stats for dpid %d: %s -> %s: %d bytes", dpid, src_ip, dst_ip, byte_count)
+            if src_ip and dst_ip:
+                key = (src_ip, dst_ip)
+                prev_byte_count = self.prev_stats[dpid].get(key, 0)
+                delta = byte_count - prev_byte_count
+                if delta < 0:
+                    delta = byte_count
+                self.prev_stats[dpid][key] = byte_count
+                self.traffic_matrix[dpid][key] += delta
+                    
+        LOG.info("Traffic matrix for dpid %d:", dpid)
+        for (src_ip, dst_ip), byte_count in self.traffic_matrix[dpid].items():
+            LOG.info("%s -> %s: %d bytes", src_ip, dst_ip, byte_count)
+
+                
     def build_packets(self, dp, dpid, forwardingTable, cmd, vlan = 10):
         LOG.info("Build Packets for Swiich %d", dpid)
         
@@ -180,10 +243,23 @@ class RDC(app_manager.RyuApp):
         
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def handler_datapath(self, ev):
-        LOG.info("Datapath Event Received %d", ev.dp.id)
-        self.dataPaths[ev.dp.id] = ev.dp
-        # if ev.enter:
-        #     self.build_packets(ev.dp, ev.dp.id)
+        dp = ev.dp
+        dpid = dp.id
+        if ev.enter:
+            LOG.info("Datapath connected: %d", dpid)
+            self.dataPaths[dpid] = dp
+        else:
+            LOG.info("Datapath disconnected: %d", dpid)
+            if dpid in self.dataPaths:
+                del self.dataPaths[dpid]
+            if dpid in self.monitor_threads:
+                hub.kill(self.monitor_threads[dpid])
+                del self.monitor_threads[dpid]
+            if dpid in self.traffic_matrix:
+                del self.traffic_matrix[dpid]
+            if dpid in self.prev_stats:
+                del self.prev_stats[dpid]
+
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):

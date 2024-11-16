@@ -42,12 +42,16 @@ class Mods():
         if instr_config is not None:
             instructions = Instructions.create_instructions(dp, instr_config)
         #
-
+        cookie = 0
+        cookie_config = ConfigParser.get_cookie(config)
+        if cookie_config is not None:
+            cookie = int(cookie_config, 0)
+            
         priority = ConfigParser.get_priority(config)
 
         mod = dp.ofproto_parser.OFPFlowMod(
             dp,
-            cookie=0,
+            cookie=cookie,
             cookie_mask=0,
             table_id=Utils.get_table(config["table"]),
             command=Utils.get_mod_command(dp, config["cmd"]),

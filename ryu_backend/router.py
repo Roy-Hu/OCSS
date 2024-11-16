@@ -137,6 +137,26 @@ class RDCController(ControllerBase):
         LOG.info("Update Forwarding Table")
         return self.set_forwarding_table_with_ip(self.rdc_app.UPDATE, req, **kwargs)
     
+    @route('rdc', '/rdc/traffic_matrix/{dpid}', methods=['GET'])
+    def get_traffic_matrix(self, req, **kwargs):
+        dpid_str = kwargs['dpid']
+        dpid = int(dpid_str)
+
+        if dpid not in self.rdc_app.traffic_matrix:
+            return Response(status=404, body='Traffic matrix for dpid {} not found'.format(dpid))
+
+        # Convert the traffic matrix to JSON
+        src_dict = self.rdc_app.traffic_matrix[dpid]
+        traffic_matrix_dict = {}
+        for (src_ip, dst_ip), byte_count in src_dict.items():
+            if src_ip not in traffic_matrix_dict:
+                traffic_matrix_dict[src_ip] = {}
+            traffic_matrix_dict[src_ip][dst_ip] = byte_count
+
+        # Return JSON response
+        body = json.dumps({dpid_str: traffic_matrix_dict})
+        return Response(content_type='application/json', body=body)
+
     def set_forwarding_table_with_ip(self, cmd, req, **kwargs):
         dpid_str = kwargs['dpid']
         dpid = dpid_lib.str_to_dpid(dpid_str)
@@ -179,3 +199,5 @@ class RDCController(ControllerBase):
         LOG.debug("Forwarding Table with IP: %s", forwardingTable)
 
         return Response(status=200)
+    
+
