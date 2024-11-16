@@ -45,7 +45,7 @@ class Mods():
         cookie = 0
         cookie_config = ConfigParser.get_cookie(config)
         if cookie_config is not None:
-            cookie = int(cookie_config, 0)
+            cookie = cookie_config
             
         priority = ConfigParser.get_priority(config)
 

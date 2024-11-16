@@ -95,6 +95,27 @@ func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []in
 	return f.putJSON(endpoint, data)
 }
 
+func (f *Forwarder) DeleteForwardingTable(dpid int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
+	if len(in_port) != len(out_port) || len(in_port) != len(src_ips) || len(in_port) != len(dst_ips) {
+		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
+	}
+	entries := make([]map[string]interface{}, len(in_port))
+	for i := range in_port {
+		entries[i] = map[string]interface{}{
+			"in_port":  in_port[i],
+			"out_port": out_port[i],
+			"src_ip":   src_ips[i],
+			"dst_ip":   dst_ips[i],
+		}
+	}
+	data := map[string]interface{}{
+		"entries": entries,
+	}
+	dpidStr := fmt.Sprintf("%016x", dpid)
+	endpoint := fmt.Sprintf("/rdc/deleteforwardingtable/%s", dpidStr)
+	return f.postJSON(endpoint, data)
+}
+
 // postJSON sends a POST request with JSON data
 func (f *Forwarder) postJSON(endpoint string, data interface{}) error {
 	return f.sendJSONRequest(http.MethodPost, endpoint, data)

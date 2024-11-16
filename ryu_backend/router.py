@@ -17,6 +17,7 @@ class RDCController(ControllerBase):
     url_set_ocs = '/rdc/set_ocs/{ip}'
     create_url_forwarding_table = '/rdc/createforwardingtable/{dpid}'
     update_url_forwarding_table = '/rdc/updateforwardingtable/{dpid}'
+    delete_url_forwarding_table = '/rdc/deleteforwardingtable/{dpid}'
     
     @route('rdc', url_set_ocs, methods=['POST'])
     def set_ocs(self, req, **kwargs):
@@ -130,12 +131,17 @@ class RDCController(ControllerBase):
     def create_forwarding_table(self, req, **kwargs):
         LOG.info("Create Forwarding Table")
 
-        return self.set_forwarding_table_with_ip(self.rdc_app.CREATE, req, **kwargs)
+        return self.set_forwarding_table(self.rdc_app.CREATE, req, **kwargs)
     
     @route('rdc', update_url_forwarding_table, methods=['PUT'], requirements={'dpid': dpid_lib.DPID_PATTERN})
-    def update_forwarding_table_with_ip(self, req, **kwargs):
+    def update_forwarding_table(self, req, **kwargs):
         LOG.info("Update Forwarding Table")
-        return self.set_forwarding_table_with_ip(self.rdc_app.UPDATE, req, **kwargs)
+        return self.set_forwarding_table(self.rdc_app.UPDATE, req, **kwargs)
+
+    @route('rdc', delete_url_forwarding_table, methods=['POST'], requirements={'dpid': dpid_lib.DPID_PATTERN})
+    def delete_forwarding_table(self, req, **kwargs):
+        LOG.info("Update Forwarding Table")
+        return self.set_forwarding_table(self.rdc_app.DELETE, req, **kwargs)
     
     @route('rdc', '/rdc/traffic_matrix/{dpid}', methods=['GET'])
     def get_traffic_matrix(self, req, **kwargs):
@@ -157,7 +163,7 @@ class RDCController(ControllerBase):
         body = json.dumps({dpid_str: traffic_matrix_dict})
         return Response(content_type='application/json', body=body)
 
-    def set_forwarding_table_with_ip(self, cmd, req, **kwargs):
+    def set_forwarding_table(self, cmd, req, **kwargs):
         dpid_str = kwargs['dpid']
         dpid = dpid_lib.str_to_dpid(dpid_str)
         try:

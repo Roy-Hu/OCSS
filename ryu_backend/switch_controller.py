@@ -29,6 +29,7 @@ class RDC(app_manager.RyuApp):
 
         self.CREATE = "create"
         self.UPDATE = "update"
+        self.DELETE = "delete"
         DEFAULT_VLAN = 10
 
         self.dataPaths = {}
@@ -117,13 +118,13 @@ class RDC(app_manager.RyuApp):
                 raise Exception("Wrong type", type_)
         return None
 
-    def create_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, priority=3):
+    def set_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, cmd, priority=3):
         LOG.info("Create ACL Unicast for port %d <-> port %d", inPort, outputPort)
         
         acl_unicast = copy.deepcopy(self.configVlanInPort)
         acl_unicast['flow_mod']['_name'] += str(vlan) + '_' + str(inPort) + '_' + str(outputPort)
         acl_unicast['flow_mod']['priority'] += str(priority)
-        acl_unicast['flow_mod']['cmd'] = 'add'
+        acl_unicast['flow_mod']['cmd'] = cmd
         acl_unicast['flow_mod']['match']['vlan_vid'] += str(vlan)
         acl_unicast['flow_mod']['match']["in_port"] += str(inPort)
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(1)
@@ -149,6 +150,13 @@ class RDC(app_manager.RyuApp):
         
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
+    def create_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, priority=3):
+        LOG.info("Create ACL Unicast port %d -> %d", inPort, outputPort)
+        return self.set_acl_unicast_vlan_inPort(dp, vlan, inPort, outputPort, 'add', priority)
+    
+    def delete_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, priority=3):
+        LOG.info("Delete ACL Unicast port %d -> %d", inPort, outputPort)
+        return self.set_acl_unicast_vlan_inPort(dp, vlan, inPort, outputPort, 'del', priority)
     
     def create_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
         LOG.info("Create ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort, srcIp, dstIp)
@@ -157,6 +165,10 @@ class RDC(app_manager.RyuApp):
     def update_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
         LOG.info("Update ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
         return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'mod', priority)
+    
+    def delete_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
+        LOG.info("Delete ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
+        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'del', priority)
     
     def createGroupInterfaces(self, dp, hostPorts, switchPorts, vlan=10):
         LOG.info("Create Group Interface for ports")
@@ -265,6 +277,12 @@ class RDC(app_manager.RyuApp):
                     self.create_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
             elif cmd == self.UPDATE:
                 self.update_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
+            elif cmd == self.DELETE:
+                if dstIp == "":
+                    self.delete_acl_unicast_vlan_inPort(dp, vlan, inPort, outPort)
+                    self.delete_acl_unicast_vlan_inPort(dp, vlan, outPort, inPort)
+                else:    
+                    self.delete_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
             else:
                 raise Exception("Invalid Command")     
         

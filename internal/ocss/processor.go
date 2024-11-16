@@ -319,6 +319,9 @@ func (p *Processor) setupForwardingTable() {
 		in_port := make([]int, 0)
 		out_port := make([]int, 0)
 
+		delete_in_port := make([]int, 0)
+		delete_out_port := make([]int, 0)
+
 		create_in_port_ip := make([]int, 0)
 		create_out_port_ip := make([]int, 0)
 		create_src_ips := make([]string, 0)
@@ -328,6 +331,11 @@ func (p *Processor) setupForwardingTable() {
 		update_out_port_ip := make([]int, 0)
 		update_src_ips := make([]string, 0)
 		update_dst_ips := make([]string, 0)
+
+		delete_in_port_ip := make([]int, 0)
+		delete_out_port_ip := make([]int, 0)
+		delete_src_ips := make([]string, 0)
+		delete_dst_ips := make([]string, 0)
 
 		for _, rule := range sw.ForwardingRule {
 			if rule.Status == ocss_context.ACTIVE {
@@ -342,6 +350,9 @@ func (p *Processor) setupForwardingTable() {
 					in_port = append(in_port, rule.SrcPort)
 					out_port = append(out_port, rule.DestPort)
 				}
+
+				rule.Status = ocss_context.ACTIVE
+
 			} else if rule.Status == ocss_context.UPDATE {
 				if rule.DstIp != "" {
 					update_in_port_ip = append(update_in_port_ip, rule.SrcPort)
@@ -349,9 +360,20 @@ func (p *Processor) setupForwardingTable() {
 					update_src_ips = append(update_src_ips, rule.SrcIp)
 					update_dst_ips = append(update_dst_ips, rule.DstIp)
 				}
-			}
 
-			rule.Status = ocss_context.ACTIVE
+				rule.Status = ocss_context.ACTIVE
+
+			} else if rule.Status == ocss_context.DELETE {
+				if rule.DstIp != "" {
+					delete_in_port_ip = append(delete_in_port_ip, rule.SrcPort)
+					delete_out_port_ip = append(delete_out_port_ip, rule.DestPort)
+					delete_src_ips = append(delete_src_ips, rule.SrcIp)
+					delete_dst_ips = append(delete_dst_ips, rule.DstIp)
+				} else {
+					delete_in_port = append(delete_in_port, rule.SrcPort)
+					delete_out_port = append(delete_out_port, rule.DestPort)
+				}
+			}
 		}
 
 		if len(in_port) != 0 && len(out_port) != 0 {
@@ -372,8 +394,21 @@ func (p *Processor) setupForwardingTable() {
 
 			forwarder.UpdateForwardingTable(sw.Id, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
 		}
-	}
 
+		if len(delete_in_port_ip) != 0 && len(delete_out_port_ip) != 0 {
+			logger.ProcessorLog.Infof("Delete Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, delete_in_port_ip, delete_out_port_ip, delete_src_ips, delete_dst_ips)
+
+			forwarder.DeleteForwardingTable(sw.Id, delete_in_port_ip, delete_out_port_ip, delete_src_ips, delete_dst_ips)
+		}
+
+		if len(delete_in_port) != 0 && len(delete_out_port) != 0 {
+			logger.ProcessorLog.Infof("Delete Forwarding Table: %d, %v, %v", sw.Id, delete_in_port, delete_out_port)
+
+			empty_ips := make([]string, len(delete_in_port))
+
+			forwarder.DeleteForwardingTable(sw.Id, delete_in_port, delete_out_port, empty_ips, empty_ips)
+		}
+	}
 }
 
 func (p *Processor) createController() {
@@ -384,5 +419,17 @@ func (p *Processor) createController() {
 
 func (p *Processor) updateController() {
 	p.setupOCS()
+	p.setupForwardingTable()
+}
+
+func (p *Processor) Stop() {
+	logger.ProcessorLog.Info("OCSS Processor is stopping")
+
+	for _, sw := range ocss_context.GetSelf().Switches {
+		for _, rule := range sw.ForwardingRule {
+			rule.Status = ocss_context.DELETE
+		}
+	}
+
 	p.setupForwardingTable()
 }

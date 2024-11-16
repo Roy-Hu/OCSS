@@ -39,4 +39,7 @@ func (s *Server) Run(ctx context.Context, wg *sync.WaitGroup) error {
 }
 
 func (s Server) Stop() {
+	logger.ServerLog.Info("OCSS Server is stopping")
+
+	s.Processor().Stop()
 }
