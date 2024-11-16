@@ -1,3 +1,4 @@
+from pickle import TRUE
 from ryu.base import app_manager
 from ryu.controller import dpset
 from ryu.controller import ofp_event
@@ -48,7 +49,7 @@ class RDC(app_manager.RyuApp):
         wsgi.register(RDCController, {rdc_instance_name: self})
         
         self.dataPaths = {}
-        config_dir = 'config/te_test/rdc'
+        config_dir = 'config'
         template_group_l2_interface_filename = "%s/%s.json" % (config_dir, "template_group_l2_interface")
         self.groupConfig = ConfigParser.get_config(template_group_l2_interface_filename)
 
@@ -201,6 +202,12 @@ class RDC(app_manager.RyuApp):
 
     def init_switch(self, dpid, hostPorts, switchPorts, vlan = 10):
         LOG.info("Initializing switch with dpid %d", dpid)
+        
+        while True:
+            if dpid in self.dataPaths:
+                break
+            LOG.info("Waiting for datapath %d to connect, retry after 1 sec", dpid)
+            hub.sleep(1)
         
         dp = self.dataPaths[dpid]
         self.createGroupInterfaces(dp, hostPorts, switchPorts, vlan)
