@@ -15,6 +15,7 @@ from ryu.lib import hub
 from ryu_backend.router import RDCController
 from log import LOG
 from collections import defaultdict
+import signal
 
 rdc_instance_name = 'rdc_app'
 
@@ -36,7 +37,12 @@ class RDC(app_manager.RyuApp):
         self.traffic_matrix = {}  # Key: dpid, Value: defaultdict
         self.prev_stats = {}      # Key: dpid, Value: defaultdict
         self.monitor_threads = {} # Key: dpid, Value: hub.spawn thread
-
+        self.switchs = set()
+        
+        self.tracked_cookie = 0x1000 
+        self.untracked_cookie = 0x2000  
+        self.cookies = set([self.tracked_cookie, self.untracked_cookie])  # Set of integers
+        
         wsgi = kwargs['wsgi']
         wsgi.register(RDCController, {rdc_instance_name: self})
         
@@ -60,6 +66,22 @@ class RDC(app_manager.RyuApp):
         template_vlan_untagged = "%s/%s.json" % (config_dir, "template_vlan_untagged")
         self.configVlanUnTagged = ConfigParser.get_config(template_vlan_untagged)
         
+        hub.spawn(self._register_signal_handler)
+
+    def _register_signal_handler(self):
+        def shutdown_handler(signum, frame):
+            LOG.info("Shutdown signal received. Cleaning up flows...")
+            self.cleanup_flows()
+            raise SystemExit()
+
+        signal.signal(signal.SIGTERM, shutdown_handler)
+        signal.signal(signal.SIGINT, shutdown_handler)
+        while True:
+            hub.sleep(1)
+            
+    def cleanup_flows(self):
+        LOG.info("TODO: Deleting all flows")
+
     def create_group_l2_interface(self, template, dp, vlan, outputPort):
         LOG.info("Create Group L2 Interface for dpid %d port %d", dp.id, outputPort)
         group_l2_interface = copy.deepcopy(template)
@@ -107,7 +129,8 @@ class RDC(app_manager.RyuApp):
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(1)
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (
         vlan, outputPort)
-        
+        acl_unicast['flow_mod']['cookie'] = self.untracked_cookie
+
         self.install_flow_mod(dp, acl_unicast)
         return
     def set_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, cmd, priority=3):
@@ -122,8 +145,7 @@ class RDC(app_manager.RyuApp):
         acl_unicast['flow_mod']['match']['ipv4_dst'] += dstIp
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(queue)
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (vlan, outputPort)
-
-        acl_unicast['flow_mod']['cookie'] = '0x1234'
+        acl_unicast['flow_mod']['cookie'] = self.tracked_cookie
         
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
@@ -175,6 +197,7 @@ class RDC(app_manager.RyuApp):
         self.prev_stats[dpid] = defaultdict(int)
         self.traffic_matrix[dpid] = defaultdict(int)
         
+        self.switchs.add(dpid)
         if dpid not in self.monitor_threads:
             self.monitor_threads[dpid] = hub.spawn(self._monitor, dp)
 
@@ -204,14 +227,14 @@ class RDC(app_manager.RyuApp):
             self.traffic_matrix[dpid] = defaultdict(int)
 
         for stat in body:
-            if stat.cookie != 0x1234:
+            if stat.cookie != self.tracked_cookie:
                 continue
             match = stat.match
             byte_count = stat.byte_count
             src_ip = match.get('ipv4_src')
             dst_ip = match.get('ipv4_dst')
             
-            LOG.info("Flow stats for dpid %d: %s -> %s: %d bytes", dpid, src_ip, dst_ip, byte_count)
+            LOG.info("Cookie Flow %d stats for dpid %d: %s -> %s: %d bytes", stat.cookie, dpid, src_ip, dst_ip, byte_count)
             if src_ip and dst_ip:
                 key = (src_ip, dst_ip)
                 prev_byte_count = self.prev_stats[dpid].get(key, 0)
@@ -228,6 +251,10 @@ class RDC(app_manager.RyuApp):
                 
     def build_packets(self, dp, dpid, forwardingTable, cmd, vlan = 10):
         LOG.info("Build Packets for Swiich %d", dpid)
+        
+        if dpid not in self.switchs:
+            LOG.info("Switch %d not initialized", dpid)
+            return
         
         for (inPort, srcIp, dstIp), outPort in forwardingTable.items():
             if cmd == self.CREATE:
