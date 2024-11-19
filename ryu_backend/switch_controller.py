@@ -49,7 +49,7 @@ class RDC(app_manager.RyuApp):
         wsgi.register(RDCController, {rdc_instance_name: self})
         
         self.dataPaths = {}
-        config_dir = 'config'
+        config_dir = '../config'
         template_group_l2_interface_filename = "%s/%s.json" % (config_dir, "template_group_l2_interface")
         self.groupConfig = ConfigParser.get_config(template_group_l2_interface_filename)
 
