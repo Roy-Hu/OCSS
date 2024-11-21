@@ -45,6 +45,7 @@ type ConnServerInfo struct {
 
 type Forward struct {
 	Device   string
+	ToRId    int
 	SrcPort  int
 	DestPort int
 	DstIp    string
@@ -105,8 +106,11 @@ func Init() error {
 			Device:         ps.Device,
 			Id:             ps.ID,
 			PortConnToMap:  make(map[int]*ConnectedTo),
-			ForwardingRule: make(map[string]*Forward),
+			ForwardingRule: make(map[int]map[string]*Forward),
+			ToRIdGenerator: 0,
 		}
+
+		s.ForwardingRule[0] = make(map[string]*Forward)
 
 		ports, err := ParsePorts(ps.Ports)
 		if err != nil {
@@ -146,10 +150,11 @@ func Init() error {
 				return fmt.Errorf("Device %s not found for ToR %s", ut.Device, t.Name)
 			}
 
+			torId := ocssContext.Switches[ut.Device].GenerateToRId()
 			ocssContext.UserView.ToRs[t.Name] = &ToR{
 				Device:         ut.Device,
 				Name:           t.Name,
-				Id:             ocssContext.Switches[ut.Device].Id,
+				Id:             torId,
 				PortConnToMap:  make(map[int]*ConnectedTo),
 				PortServerConn: make(map[int]*ConnServerInfo),
 			}
@@ -157,6 +162,8 @@ func Init() error {
 			if _, ok := ocssContext.Switches[ut.Device]; !ok {
 				return fmt.Errorf("Switch %s not found for ToR %s", ut.Device, t.Name)
 			}
+
+			ocssContext.Switches[ut.Device].ForwardingRule[torId] = make(map[string]*Forward)
 
 			tor_ports, err := ParsePorts(t.Ports)
 			if err != nil {
@@ -387,30 +394,31 @@ func GetSelf() *OCSSContext {
 }
 
 func PrintFowardingRule() {
-	rules := make(map[string]map[int]map[int][]string)
+	rules := make(map[string]map[int][]string)
 	for _, s := range ocssContext.Switches {
-		for _, f := range s.ForwardingRule {
-			if _, ok := rules[f.Device]; !ok {
-				rules[f.Device] = make(map[int]map[int][]string)
+		for torId, fowards := range s.ForwardingRule {
+			for _, f := range fowards {
+				if _, ok := rules[f.Device]; !ok {
+					rules[f.Device] = make(map[int][]string)
+				}
+
+				if _, ok := rules[f.Device][torId]; !ok {
+					rules[f.Device][torId] = make([]string, 0)
+				}
+
+				rules[f.Device][torId] = append(rules[f.Device][torId], fmt.Sprintf("SrcIp %s Port[%d -> %d] DstIp %s", f.SrcIp, f.SrcPort, f.DestPort, f.DstIp))
+
 			}
 
-			if _, ok := rules[f.Device][f.SrcPort]; !ok {
-				rules[f.Device][f.SrcPort] = make(map[int][]string)
-			}
-
-			if f.DstIp == "" {
-				continue
-			}
-
-			rules[f.Device][f.SrcPort][f.DestPort] = append(rules[f.Device][f.SrcPort][f.DestPort], f.DstIp)
 		}
 	}
 
-	for device, srcPorts := range rules {
+	for device, torRules := range rules {
 		logger.CtxLog.Errorf("Device: %s\n", device)
-		for srcPort, destPorts := range srcPorts {
-			for destPort, ips := range destPorts {
-				logger.CtxLog.Warnf("%d -> %d %s", srcPort, destPort, ips)
+		for torId, rules := range torRules {
+			logger.CtxLog.Errorf("ToR %d\n", torId)
+			for _, rule := range rules {
+				logger.CtxLog.Errorf("%s\n", rule)
 			}
 		}
 	}

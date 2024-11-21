@@ -36,6 +36,7 @@ class RDC(app_manager.RyuApp):
         self.dataPaths = {}
         self.connectionObj = None
         
+        # TODO: Can be a report instead of traffic matrix
         self.traffic_matrix = {}  # Key: dpid, Value: defaultdict
         self.prev_stats = {}      # Key: dpid, Value: defaultdict
         self.monitor_threads = {} # Key: dpid, Value: hub.spawn thread
@@ -43,7 +44,7 @@ class RDC(app_manager.RyuApp):
         
         self.tracked_cookie = 0x1000 
         self.untracked_cookie = 0x2000  
-        self.cookies = set([self.tracked_cookie, self.untracked_cookie])  # Set of integers
+        self.tor_tracked_cookies = set()  # Set of integers
         
         wsgi = kwargs['wsgi']
         wsgi.register(RDCController, {rdc_instance_name: self})
@@ -135,7 +136,7 @@ class RDC(app_manager.RyuApp):
 
         self.install_flow_mod(dp, acl_unicast)
         return
-    def set_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, cmd, priority=3):
+    def set_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, cmd, priority=3):
         acl_unicast = copy.deepcopy(self.configVlanInPortSrcIPDesIP)
         queue = 1
         acl_unicast['flow_mod']['_name'] += str(vlan) + '_' + str(inPort) + '_' + srcIp + dstIp + '_' + str(outputPort)
@@ -147,7 +148,9 @@ class RDC(app_manager.RyuApp):
         acl_unicast['flow_mod']['match']['ipv4_dst'] += dstIp
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][0]['set_queue']['queue_id'] += str(queue)
         acl_unicast['flow_mod']['instructions'][0]['write'][0]['actions'][1]['group']['group_id'] += "%03x%04x" % (vlan, outputPort)
-        acl_unicast['flow_mod']['cookie'] = self.tracked_cookie
+        
+        acl_unicast['flow_mod']['cookie'] = self.tracked_cookie + torid
+        self.tor_tracked_cookies.add(self.tracked_cookie + torid)
         
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
@@ -159,17 +162,17 @@ class RDC(app_manager.RyuApp):
         LOG.info("Delete ACL Unicast port %d -> %d", inPort, outputPort)
         return self.set_acl_unicast_vlan_inPort(dp, vlan, inPort, outputPort, 'del', priority)
     
-    def create_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
+    def create_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
         LOG.info("Create ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort, srcIp, dstIp)
-        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'add', priority)
+        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outputPort, 'add', priority)
 
-    def update_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
+    def update_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
         LOG.info("Update ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
-        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'mod', priority)
+        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outputPort, 'mod', priority)
     
-    def delete_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
+    def delete_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
         LOG.info("Delete ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
-        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outputPort, 'del', priority)
+        return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outputPort, 'del', priority)
     
     def createGroupInterfaces(self, dp, hostPorts, switchPorts, vlan=10):
         LOG.info("Create Group Interface for ports")
@@ -224,7 +227,7 @@ class RDC(app_manager.RyuApp):
         LOG.info("Starting monitoring thread for dpid %d", datapath.id)
         while True:
             self.request_flow_stats(datapath)
-            hub.sleep(3) 
+            hub.sleep(1) 
 
     def request_flow_stats(self, datapath):
         LOG.info("Request flow stats for dpid %d", datapath.id)
@@ -241,35 +244,48 @@ class RDC(app_manager.RyuApp):
         body = ev.msg.body
 
         if dpid not in self.prev_stats:
-            self.prev_stats[dpid] = defaultdict(int)
+            self.prev_stats[dpid] = {}
         if dpid not in self.traffic_matrix:
-            self.traffic_matrix[dpid] = defaultdict(int)
+            self.traffic_matrix[dpid] = {}
 
         for stat in body:
-            if stat.cookie != self.tracked_cookie:
+            if stat.cookie not in self.tor_tracked_cookies:
                 continue
+
+            torid = stat.cookie - self.tracked_cookie
             match = stat.match
             byte_count = stat.byte_count
             src_ip = match.get('ipv4_src')
             dst_ip = match.get('ipv4_dst')
-            
-            LOG.info("Cookie Flow %d stats for dpid %d: %s -> %s: %d bytes", stat.cookie, dpid, src_ip, dst_ip, byte_count)
+
+            LOG.info(
+                "Cookie Flow %d stats for dpid %d: %s -> %s: %d bytes",
+                stat.cookie, dpid, src_ip, dst_ip, byte_count
+            )
+
             if src_ip and dst_ip:
                 key = (src_ip, dst_ip)
-                prev_byte_count = self.prev_stats[dpid].get(key, 0)
+                if torid not in self.prev_stats[dpid]:
+                    self.prev_stats[dpid][torid] = {}
+                if torid not in self.traffic_matrix[dpid]:
+                    self.traffic_matrix[dpid][torid] = {}
+                
+                prev_byte_count = self.prev_stats.get(key, 0)
                 delta = byte_count - prev_byte_count
                 if delta < 0:
                     delta = byte_count
-                self.prev_stats[dpid][key] = byte_count
-                self.traffic_matrix[dpid][key] += delta
-                    
-        LOG.info("Traffic matrix for dpid %d:", dpid)
-        for (src_ip, dst_ip), byte_count in self.traffic_matrix[dpid].items():
-            LOG.info("%s -> %s: %d bytes", src_ip, dst_ip, byte_count)
-
                 
-    def build_packets(self, dp, dpid, forwardingTable, cmd, vlan = 10):
+                self.prev_stats[dpid][torid][key] = byte_count
+                self.traffic_matrix[dpid][torid][key] = (
+                    self.traffic_matrix[dpid][torid].get(key, 0) + delta
+                )
+
+    def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         LOG.info("Build Packets for Swiich %d", dpid)
+        
+        dp = self.dataPaths.get(dpid)
+        if dp is None:
+            LOG.info("Cannot find %d", dpid)
         
         if dpid not in self.switchs:
             LOG.info("Switch %d not initialized", dpid)
@@ -277,19 +293,19 @@ class RDC(app_manager.RyuApp):
         
         for (inPort, srcIp, dstIp), outPort in forwardingTable.items():
             if cmd == self.CREATE:
-                if dstIp == "":
+                if torid == 0:
                     self.create_acl_unicast_vlan_inPort(dp, vlan, inPort, outPort)
                     self.create_acl_unicast_vlan_inPort(dp, vlan, outPort, inPort)
                 else:
-                    self.create_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
+                    self.create_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outPort)
             elif cmd == self.UPDATE:
-                self.update_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
+                self.update_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outPort)
             elif cmd == self.DELETE:
-                if dstIp == "":
-                    self.delete_acl_unicast_vlan_inPort(dp, vlan, inPort, outPort)
-                    self.delete_acl_unicast_vlan_inPort(dp, vlan, outPort, inPort)
+                if torid == 0:
+                    self.delete_acl_unicast_vlan_inPort(dp, torid, vlan, inPort, outPort)
+                    self.delete_acl_unicast_vlan_inPort(dp, torid, vlan, outPort, inPort)
                 else:    
-                    self.delete_acl_unicast_vlan_inPort_srcIp_dstIp(dp, vlan, inPort, srcIp, dstIp, outPort)
+                    self.delete_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outPort)
             else:
                 raise Exception("Invalid Command")     
         

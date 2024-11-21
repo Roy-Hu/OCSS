@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
+	ocss_context "github.com/comp590/ocss/internal/context"
 	"github.com/comp590/ocss/internal/logger"
 	"github.com/comp590/ocss/pkg/app"
 )
@@ -52,7 +54,7 @@ func (f *Forwarder) SetOCS(ip string, ocs_in_port []int, ocs_out_port []int) err
 }
 
 // CreateForwardingTable sends forwarding table entries with IP addresses to the RDC
-func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
+func (f *Forwarder) CreateForwardingTable(dpid int, torId int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
 	if len(in_port) != len(out_port) || len(in_port) != len(src_ips) || len(in_port) != len(dst_ips) {
 		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
 	}
@@ -69,12 +71,12 @@ func (f *Forwarder) CreateForwardingTable(dpid int, in_port []int, out_port []in
 		"entries": entries,
 	}
 	dpidStr := fmt.Sprintf("%016x", dpid)
-	endpoint := fmt.Sprintf("/rdc/createforwardingtable/%s", dpidStr)
+	endpoint := fmt.Sprintf("/rdc/createforwardingtable/%s/%d", dpidStr, torId)
 	return f.postJSON(endpoint, data)
 }
 
 // CreateForwardingTable sends forwarding table entries with IP addresses to the RDC
-func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
+func (f *Forwarder) UpdateForwardingTable(dpid int, torId int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
 	if len(in_port) != len(out_port) || len(in_port) != len(src_ips) || len(in_port) != len(dst_ips) {
 		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
 	}
@@ -91,11 +93,11 @@ func (f *Forwarder) UpdateForwardingTable(dpid int, in_port []int, out_port []in
 		"entries": entries,
 	}
 	dpidStr := fmt.Sprintf("%016x", dpid)
-	endpoint := fmt.Sprintf("/rdc/updateforwardingtable/%s", dpidStr)
+	endpoint := fmt.Sprintf("/rdc/updateforwardingtable/%s/%d", dpidStr, torId)
 	return f.putJSON(endpoint, data)
 }
 
-func (f *Forwarder) DeleteForwardingTable(dpid int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
+func (f *Forwarder) DeleteForwardingTable(dpid int, torId int, in_port []int, out_port []int, src_ips []string, dst_ips []string) error {
 	if len(in_port) != len(out_port) || len(in_port) != len(src_ips) || len(in_port) != len(dst_ips) {
 		return fmt.Errorf("Lengths of in_port, out_port, and ips must be equal")
 	}
@@ -112,8 +114,69 @@ func (f *Forwarder) DeleteForwardingTable(dpid int, in_port []int, out_port []in
 		"entries": entries,
 	}
 	dpidStr := fmt.Sprintf("%016x", dpid)
-	endpoint := fmt.Sprintf("/rdc/deleteforwardingtable/%s", dpidStr)
+	endpoint := fmt.Sprintf("/rdc/deleteforwardingtable/%s/%d", dpidStr, torId)
 	return f.postJSON(endpoint, data)
+}
+
+func (f *Forwarder) GetTrafficMatrix(dpid int, torid int) (ocss_context.TrafficMatrix, error) {
+	dpidStr := fmt.Sprintf("%016x", dpid)
+	endpoint := fmt.Sprintf("/rdc/traffic_matrix/%s/%d", dpidStr, torid)
+
+	var trafficMatrix ocss_context.TrafficMatrix
+
+	// Make the GET request and parse the JSON response
+	err := f.getJSON(endpoint, &trafficMatrix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get traffic matrix: %v", err)
+	}
+
+	return trafficMatrix, nil
+}
+
+func (f *Forwarder) getJSON(endpoint string, response interface{}) error {
+	// Construct the full URL
+	url := f.RDCAddress + endpoint
+
+	// Create a new HTTP GET request
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		logger.ProcessorLog.Errorf("failed to create GET request: %v", err)
+		return fmt.Errorf("failed to create GET request: %v", err)
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Initialize the HTTP client (you can customize the client if needed)
+	client := &http.Client{}
+
+	// Send the HTTP request
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.ProcessorLog.Errorf("failed to send GET request: %v", err)
+		return fmt.Errorf("failed to send GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for successful status codes (200 OK)
+	if resp.StatusCode != http.StatusOK {
+		// Read the response body for error details
+		bodyBytes, errRead := io.ReadAll(resp.Body)
+		if errRead != nil {
+			logger.ProcessorLog.Errorf("failed to read response body: %v", errRead)
+			return fmt.Errorf("HTTP GET request failed with status: %s", resp.Status)
+		}
+		return fmt.Errorf("HTTP GET request failed with status: %s, body: %s", resp.Status, string(bodyBytes))
+	}
+
+	// Decode the JSON response into the provided interface{}
+	err = json.NewDecoder(resp.Body).Decode(response)
+	if err != nil {
+		logger.ProcessorLog.Errorf("failed to decode JSON response: %v", err)
+		return fmt.Errorf("failed to decode JSON response: %v", err)
+	}
+
+	return nil
 }
 
 // postJSON sends a POST request with JSON data

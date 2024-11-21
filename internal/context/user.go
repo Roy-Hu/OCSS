@@ -1,6 +1,8 @@
 package context
 
 import (
+	"context"
+
 	"github.com/comp590/ocss/internal/logger"
 )
 
@@ -8,6 +10,12 @@ type UserView struct {
 	OCSs    map[string]*OCS
 	ToRs    map[string]*ToR
 	Servers map[string]*Server
+}
+
+type State struct {
+	Triggers  []func(ctx context.Context) bool `yaml:"-"`
+	Actions   []func() string                  `yaml:"-"`
+	InitState bool
 }
 
 func (u *UserView) FindToRByDeviceAndPort(device string, port int) *ToR {
@@ -45,6 +53,8 @@ type Connection struct {
 	In_port  []int
 	Out_port []int
 }
+
+type TrafficMatrix map[string]map[string]int
 
 func (o *OCS) UpdateConn(conn *Connection) {
 	for i := range len(conn.In_port) {

@@ -98,7 +98,7 @@ func (p *Processor) CreateForwardingTables() error {
 
 							// the in port connects to the server and the out port connects to the ocs beed to be treated as a psycial link
 
-							sw.AddForwardingRule(in_port, out_port, "", "")
+							sw.AddForwardingRule(0, in_port, out_port, "", "")
 
 							// server - > sw in port -> sw out port -> ocs in port share the same sever pointer
 							// since we logically connect the server to the ocs
@@ -254,11 +254,11 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 									for _, dst_server := range dst_tor_servers {
 										dst_server_ip := self.Servers[dst_server].Ip
 										// src server -> src tor -> ocs -> dst tor -> dst server
-										src_sw.AddForwardingRule(tor_server_port, tor_ocs_port, src_server_ip, dst_server_ip)
+										src_sw.AddForwardingRule(src_tor.Id, tor_server_port, tor_ocs_port, src_server_ip, dst_server_ip)
 										logger.ProcessorLog.Infof("Server[%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[src_server].Ip, src_tor.Name, tor_server_port, tor_ocs_port, dst_server_ip)
 
 										// dst server -> dst tor -> ocs -> src tor -> src server
-										src_sw.AddForwardingRule(tor_ocs_port, tor_server_port, dst_server_ip, src_server_ip)
+										src_sw.AddForwardingRule(src_tor.Id, tor_ocs_port, tor_server_port, dst_server_ip, src_server_ip)
 										logger.ProcessorLog.Infof("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[dst_server].Ip, src_tor.Name, tor_ocs_port, tor_server_port, src_server_ip)
 									}
 								}
@@ -316,99 +316,115 @@ func (p *Processor) setupForwardingTable() {
 	forwarder := p.Forwarder()
 
 	for _, sw := range self.Switches {
-		in_port := make([]int, 0)
-		out_port := make([]int, 0)
 
-		delete_in_port := make([]int, 0)
-		delete_out_port := make([]int, 0)
+		for torId, torRules := range sw.ForwardingRule {
+			for _, rule := range torRules {
+				in_port := make([]int, 0)
+				out_port := make([]int, 0)
 
-		create_in_port_ip := make([]int, 0)
-		create_out_port_ip := make([]int, 0)
-		create_src_ips := make([]string, 0)
-		create_dst_ips := make([]string, 0)
+				delete_in_port := make([]int, 0)
+				delete_out_port := make([]int, 0)
 
-		update_in_port_ip := make([]int, 0)
-		update_out_port_ip := make([]int, 0)
-		update_src_ips := make([]string, 0)
-		update_dst_ips := make([]string, 0)
+				create_in_port_ip := make([]int, 0)
+				create_out_port_ip := make([]int, 0)
+				create_src_ips := make([]string, 0)
+				create_dst_ips := make([]string, 0)
 
-		delete_in_port_ip := make([]int, 0)
-		delete_out_port_ip := make([]int, 0)
-		delete_src_ips := make([]string, 0)
-		delete_dst_ips := make([]string, 0)
+				update_in_port_ip := make([]int, 0)
+				update_out_port_ip := make([]int, 0)
+				update_src_ips := make([]string, 0)
+				update_dst_ips := make([]string, 0)
 
-		for _, rule := range sw.ForwardingRule {
-			if rule.Status == ocss_context.ACTIVE {
-				continue
-			} else if rule.Status == ocss_context.CREATE {
-				if rule.DstIp != "" {
-					create_in_port_ip = append(create_in_port_ip, rule.SrcPort)
-					create_out_port_ip = append(create_out_port_ip, rule.DestPort)
-					create_src_ips = append(create_src_ips, rule.SrcIp)
-					create_dst_ips = append(create_dst_ips, rule.DstIp)
-				} else {
-					in_port = append(in_port, rule.SrcPort)
-					out_port = append(out_port, rule.DestPort)
+				delete_in_port_ip := make([]int, 0)
+				delete_out_port_ip := make([]int, 0)
+				delete_src_ips := make([]string, 0)
+				delete_dst_ips := make([]string, 0)
+
+				if rule.Status == ocss_context.ACTIVE {
+					continue
+				} else if rule.Status == ocss_context.CREATE {
+					if rule.DstIp != "" {
+						create_in_port_ip = append(create_in_port_ip, rule.SrcPort)
+						create_out_port_ip = append(create_out_port_ip, rule.DestPort)
+						create_src_ips = append(create_src_ips, rule.SrcIp)
+						create_dst_ips = append(create_dst_ips, rule.DstIp)
+					} else {
+						in_port = append(in_port, rule.SrcPort)
+						out_port = append(out_port, rule.DestPort)
+					}
+
+					rule.Status = ocss_context.ACTIVE
+
+				} else if rule.Status == ocss_context.UPDATE {
+					if rule.DstIp != "" {
+						update_in_port_ip = append(update_in_port_ip, rule.SrcPort)
+						update_out_port_ip = append(update_out_port_ip, rule.DestPort)
+						update_src_ips = append(update_src_ips, rule.SrcIp)
+						update_dst_ips = append(update_dst_ips, rule.DstIp)
+					}
+
+					rule.Status = ocss_context.ACTIVE
+
+				} else if rule.Status == ocss_context.DELETE {
+					if rule.DstIp != "" {
+						delete_in_port_ip = append(delete_in_port_ip, rule.SrcPort)
+						delete_out_port_ip = append(delete_out_port_ip, rule.DestPort)
+						delete_src_ips = append(delete_src_ips, rule.SrcIp)
+						delete_dst_ips = append(delete_dst_ips, rule.DstIp)
+					} else {
+						delete_in_port = append(delete_in_port, rule.SrcPort)
+						delete_out_port = append(delete_out_port, rule.DestPort)
+					}
 				}
 
-				rule.Status = ocss_context.ACTIVE
+				if len(in_port) != 0 && len(out_port) != 0 {
+					logger.ProcessorLog.Infof("Forwarding Table: %d, %v, %v", sw.Id, in_port, out_port)
+					empty_ips := make([]string, len(in_port))
 
-			} else if rule.Status == ocss_context.UPDATE {
-				if rule.DstIp != "" {
-					update_in_port_ip = append(update_in_port_ip, rule.SrcPort)
-					update_out_port_ip = append(update_out_port_ip, rule.DestPort)
-					update_src_ips = append(update_src_ips, rule.SrcIp)
-					update_dst_ips = append(update_dst_ips, rule.DstIp)
+					forwarder.CreateForwardingTable(sw.Id, torId, in_port, out_port, empty_ips, empty_ips)
 				}
 
-				rule.Status = ocss_context.ACTIVE
+				if len(create_in_port_ip) != 0 && len(create_out_port_ip) != 0 {
+					logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
 
-			} else if rule.Status == ocss_context.DELETE {
-				if rule.DstIp != "" {
-					delete_in_port_ip = append(delete_in_port_ip, rule.SrcPort)
-					delete_out_port_ip = append(delete_out_port_ip, rule.DestPort)
-					delete_src_ips = append(delete_src_ips, rule.SrcIp)
-					delete_dst_ips = append(delete_dst_ips, rule.DstIp)
-				} else {
-					delete_in_port = append(delete_in_port, rule.SrcPort)
-					delete_out_port = append(delete_out_port, rule.DestPort)
+					forwarder.CreateForwardingTable(sw.Id, torId, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
+				}
+
+				if len(update_in_port_ip) != 0 && len(update_out_port_ip) != 0 {
+					logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
+
+					forwarder.UpdateForwardingTable(sw.Id, torId, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
+				}
+
+				if len(delete_in_port_ip) != 0 && len(delete_out_port_ip) != 0 {
+					logger.ProcessorLog.Infof("Delete Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, delete_in_port_ip, delete_out_port_ip, delete_src_ips, delete_dst_ips)
+
+					forwarder.DeleteForwardingTable(sw.Id, torId, delete_in_port_ip, delete_out_port_ip, delete_src_ips, delete_dst_ips)
+				}
+
+				if len(delete_in_port) != 0 && len(delete_out_port) != 0 {
+					logger.ProcessorLog.Infof("Delete Forwarding Table: %d, %v, %v", sw.Id, delete_in_port, delete_out_port)
+
+					empty_ips := make([]string, len(delete_in_port))
+
+					forwarder.DeleteForwardingTable(sw.Id, torId, delete_in_port, delete_out_port, empty_ips, empty_ips)
 				}
 			}
 		}
 
-		if len(in_port) != 0 && len(out_port) != 0 {
-			logger.ProcessorLog.Infof("Forwarding Table: %d, %v, %v", sw.Id, in_port, out_port)
-			empty_ips := make([]string, len(in_port))
-
-			forwarder.CreateForwardingTable(sw.Id, in_port, out_port, empty_ips, empty_ips)
-		}
-
-		if len(create_in_port_ip) != 0 && len(create_out_port_ip) != 0 {
-			logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
-
-			forwarder.CreateForwardingTable(sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
-		}
-
-		if len(update_in_port_ip) != 0 && len(update_out_port_ip) != 0 {
-			logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
-
-			forwarder.UpdateForwardingTable(sw.Id, update_in_port_ip, update_out_port_ip, update_src_ips, update_dst_ips)
-		}
-
-		if len(delete_in_port_ip) != 0 && len(delete_out_port_ip) != 0 {
-			logger.ProcessorLog.Infof("Delete Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, delete_in_port_ip, delete_out_port_ip, delete_src_ips, delete_dst_ips)
-
-			forwarder.DeleteForwardingTable(sw.Id, delete_in_port_ip, delete_out_port_ip, delete_src_ips, delete_dst_ips)
-		}
-
-		if len(delete_in_port) != 0 && len(delete_out_port) != 0 {
-			logger.ProcessorLog.Infof("Delete Forwarding Table: %d, %v, %v", sw.Id, delete_in_port, delete_out_port)
-
-			empty_ips := make([]string, len(delete_in_port))
-
-			forwarder.DeleteForwardingTable(sw.Id, delete_in_port, delete_out_port, empty_ips, empty_ips)
-		}
 	}
+}
+
+func (p *Processor) GetTraffic(swId int, torId int) ocss_context.TrafficMatrix {
+	forwarder := p.Forwarder()
+
+	traffic, err := forwarder.GetTrafficMatrix(swId, torId)
+	if err != nil {
+		logger.ProcessorLog.Errorf("Error getting traffic matrix: %v", err)
+		return nil
+	}
+
+	return traffic
 }
 
 func (p *Processor) createController() {
@@ -426,8 +442,10 @@ func (p *Processor) Stop() {
 	logger.ProcessorLog.Info("OCSS Processor is stopping")
 
 	for _, sw := range ocss_context.GetSelf().Switches {
-		for _, rule := range sw.ForwardingRule {
-			rule.Status = ocss_context.DELETE
+		for _, rules := range sw.ForwardingRule {
+			for _, rule := range rules {
+				rule.Status = ocss_context.DELETE
+			}
 		}
 	}
 

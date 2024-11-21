@@ -7,25 +7,32 @@ import (
 )
 
 type Switch struct {
-	Device         string
-	Id             int
-	PortConnToMap  map[int]*ConnectedTo
-	ForwardingRule map[string]*Forward
+	Device        string
+	Id            int
+	PortConnToMap map[int]*ConnectedTo
+	// TODO: Maybe it should be put under ToR
+	ForwardingRule map[int]map[string]*Forward
 	PortServerConn map[int]*ConnServerInfo
+	ToRIdGenerator int
 }
 
-func (s *Switch) AddForwardingRule(inPort int, outPort int, srcIp string, dstIp string) {
+func (s *Switch) GenerateToRId() int {
+	s.ToRIdGenerator++
+	return s.ToRIdGenerator
+}
+
+func (s *Switch) AddForwardingRule(torId int, inPort int, outPort int, srcIp string, dstIp string) {
 	rule_name := getRuleName(s.Device, inPort, outPort, srcIp, dstIp)
 
-	if _, ok := s.ForwardingRule[rule_name]; ok {
-		if s.ForwardingRule[rule_name].DestPort != outPort {
+	if _, ok := s.ForwardingRule[torId][rule_name]; ok {
+		if s.ForwardingRule[torId][rule_name].DestPort != outPort {
 			logger.SwitchLog.Infof("Update Forwarding Rule: %s", rule_name)
-			s.ForwardingRule[rule_name].DestPort = outPort
-			s.ForwardingRule[rule_name].Status = UPDATE
+			s.ForwardingRule[torId][rule_name].DestPort = outPort
+			s.ForwardingRule[torId][rule_name].Status = UPDATE
 		}
 	} else {
 		logger.SwitchLog.Infof("Add New Forwarding Rule: %s", rule_name)
-		s.ForwardingRule[rule_name] = &Forward{
+		s.ForwardingRule[torId][rule_name] = &Forward{
 			Device:   s.Device,
 			SrcPort:  inPort,
 			DestPort: outPort,

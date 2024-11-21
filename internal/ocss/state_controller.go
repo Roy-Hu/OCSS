@@ -82,7 +82,7 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 	logger.StateLog.Info("State Controller is running")
 
 	self := ocss_context.GetSelf()
-	self.States = ocss_context.SetupStates(self.UserView)
+	self.States = s.setupStates(self.UserView)
 	for stateName, state := range self.States {
 		if state.InitState {
 			wg.Add(1)
@@ -113,4 +113,25 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 			}(stateName, self.States)
 		}
 	}
+}
+
+func (s *StateController) GetTraffic(tor string) ocss_context.TrafficMatrix {
+	self := ocss_context.GetSelf()
+	processor := s.Processor()
+
+	if _, ok := self.UserView.ToRs[tor]; !ok {
+		logger.StateLog.Errorf("ToR %s does not exist", tor)
+		return nil
+	}
+
+	sw := self.UserView.ToRs[tor].Device
+	if _, ok := self.Switches[self.UserView.ToRs[tor].Device]; !ok {
+		logger.StateLog.Errorf("Switch %s does not exist", sw)
+		return nil
+	}
+
+	swid := self.Switches[sw].Id
+	torid := self.UserView.ToRs[tor].Id
+
+	return processor.GetTraffic(swid, torid)
 }

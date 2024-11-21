@@ -3,6 +3,7 @@ from ryu.app.wsgi import ControllerBase, Response, route
 from ryu.lib import dpid as dpid_lib
 
 from log import LOG
+from collections import defaultdict
 
 rdc_instance_name = 'rdc_app'
 
@@ -15,9 +16,10 @@ class RDCController(ControllerBase):
     # URL patterns
     url_set_switch_info = '/rdc/set_switch_info/{dpid}'
     url_set_ocs = '/rdc/set_ocs/{ip}'
-    create_url_forwarding_table = '/rdc/createforwardingtable/{dpid}'
-    update_url_forwarding_table = '/rdc/updateforwardingtable/{dpid}'
-    delete_url_forwarding_table = '/rdc/deleteforwardingtable/{dpid}'
+    create_url_forwarding_table = '/rdc/createforwardingtable/{dpid}/{torid}'
+    update_url_forwarding_table = '/rdc/updateforwardingtable/{dpid}/{torid}'
+    delete_url_forwarding_table = '/rdc/deleteforwardingtable/{dpid}/{torid}'
+    get_traffic_matrix_url = '/rdc/traffic_matrix/{dpid}/{torid}'
     
     @route('rdc', url_set_ocs, methods=['POST'])
     def set_ocs(self, req, **kwargs):
@@ -127,32 +129,37 @@ class RDCController(ControllerBase):
 
         return Response(status=200)
 
-    @route('rdc', create_url_forwarding_table, methods=['POST'], requirements={'dpid': dpid_lib.DPID_PATTERN})
+    @route('rdc', create_url_forwarding_table, methods=['POST'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def create_forwarding_table(self, req, **kwargs):
         LOG.info("Create Forwarding Table")
 
         return self.set_forwarding_table(self.rdc_app.CREATE, req, **kwargs)
     
-    @route('rdc', update_url_forwarding_table, methods=['PUT'], requirements={'dpid': dpid_lib.DPID_PATTERN})
+    @route('rdc', update_url_forwarding_table, methods=['PUT'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def update_forwarding_table(self, req, **kwargs):
         LOG.info("Update Forwarding Table")
         return self.set_forwarding_table(self.rdc_app.UPDATE, req, **kwargs)
 
-    @route('rdc', delete_url_forwarding_table, methods=['POST'], requirements={'dpid': dpid_lib.DPID_PATTERN})
+    @route('rdc', delete_url_forwarding_table, methods=['POST'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def delete_forwarding_table(self, req, **kwargs):
         LOG.info("Update Forwarding Table")
         return self.set_forwarding_table(self.rdc_app.DELETE, req, **kwargs)
     
-    @route('rdc', '/rdc/traffic_matrix/{dpid}', methods=['GET'])
+    @route('rdc', get_traffic_matrix_url, methods=['GET'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def get_traffic_matrix(self, req, **kwargs):
         dpid_str = kwargs['dpid']
         dpid = int(dpid_str)
+        torid_str = kwargs['torid']
+        torid = int(torid_str)
 
         if dpid not in self.rdc_app.traffic_matrix:
-            return Response(status=404, body='Traffic matrix for dpid {} not found'.format(dpid))
+            self.rdc_app.traffic_matrix[dpid] = {}
+            
+            if torid not in self.rdc_app.traffic_matrix[dpid]:
+                self.rdc_app.traffic_matrix[dpid][torid] = {}
 
-        # Convert the traffic matrix to JSON
-        src_dict = self.rdc_app.traffic_matrix[dpid]
+        # Convert the traffic matrix for the specific torid to JSON
+        src_dict = self.rdc_app.traffic_matrix[dpid][torid]
         traffic_matrix_dict = {}
         for (src_ip, dst_ip), byte_count in src_dict.items():
             if src_ip not in traffic_matrix_dict:
@@ -160,12 +167,15 @@ class RDCController(ControllerBase):
             traffic_matrix_dict[src_ip][dst_ip] = byte_count
 
         # Return JSON response
-        body = json.dumps({dpid_str: traffic_matrix_dict})
+        body = json.dumps(traffic_matrix_dict)
         return Response(content_type='application/json', body=body)
 
     def set_forwarding_table(self, cmd, req, **kwargs):
         dpid_str = kwargs['dpid']
         dpid = dpid_lib.str_to_dpid(dpid_str)
+        torid_str = kwargs['torid']
+        torid = int(torid_str)
+        
         try:
             new_vars = req.json if req.body else {}
         except ValueError:
@@ -190,17 +200,13 @@ class RDCController(ControllerBase):
                 continue  # Skip invalid entries
             forwardingTable[(in_port, src_ip, dst_ip)] = out_port
 
-        dp = self.rdc_app.dataPaths.get(dpid)
-        if dp:
-            try:
-                self.rdc_app.build_packets(dp, dpid, forwardingTable, cmd)
-                LOG.info("Successfully built packets for dpid %s", dpid_str)
-            except Exception as e:
-                LOG.exception("Error building packets for dpid %s: %s", dpid_str, e)
-                return Response(status=500, body='Internal Server Error while building packets')
-        else:
-            LOG.error("Datapath %s not found", dpid_str)
-            return Response(status=404, body='Datapath not found')
+        try:
+            self.rdc_app.build_packets(dpid, torid, forwardingTable, cmd)
+            LOG.info("Successfully built packets for dpid %s", dpid_str)
+        except Exception as e:
+            LOG.exception("Error building packets for dpid %s: %s", dpid_str, e)
+            return Response(status=500, body='Internal Server Error while building packets')
+
         
         LOG.debug("Forwarding Table with IP: %s", forwardingTable)
 
