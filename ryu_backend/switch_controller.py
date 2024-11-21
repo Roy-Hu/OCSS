@@ -41,6 +41,7 @@ class RDC(app_manager.RyuApp):
         self.prev_stats = {}      # Key: dpid, Value: defaultdict
         self.monitor_threads = {} # Key: dpid, Value: hub.spawn thread
         self.switchs = set()
+        self.lock = hub.Semaphore()
         
         self.tracked_cookie = 0x1000 
         self.untracked_cookie = 0x2000  
@@ -75,10 +76,15 @@ class RDC(app_manager.RyuApp):
         def shutdown_handler(signum, frame):
             LOG.info("Shutdown signal received. Cleaning up flows...")
             self.cleanup_flows()
+            
+            for dpid in self.monitor_threads:
+                hub.kill(self.monitor_threads[dpid])
+            
             raise SystemExit()
 
         signal.signal(signal.SIGTERM, shutdown_handler)
         signal.signal(signal.SIGINT, shutdown_handler)
+            
         while True:
             hub.sleep(1)
             
@@ -216,8 +222,8 @@ class RDC(app_manager.RyuApp):
         self.createGroupInterfaces(dp, hostPorts, switchPorts, vlan)
         self.tagVlan(dp, hostPorts + switchPorts, vlan)
         
-        self.prev_stats[dpid] = defaultdict(int)
-        self.traffic_matrix[dpid] = defaultdict(int)
+        self.prev_stats[dpid] = {}
+        self.traffic_matrix[dpid] = {}
         
         self.switchs.add(dpid)
         if dpid not in self.monitor_threads:
@@ -243,15 +249,10 @@ class RDC(app_manager.RyuApp):
         dpid = datapath.id
         body = ev.msg.body
 
-        if dpid not in self.prev_stats:
-            self.prev_stats[dpid] = {}
-        if dpid not in self.traffic_matrix:
-            self.traffic_matrix[dpid] = {}
-
         for stat in body:
             if stat.cookie not in self.tor_tracked_cookies:
                 continue
-
+            
             torid = stat.cookie - self.tracked_cookie
             match = stat.match
             byte_count = stat.byte_count
@@ -265,20 +266,22 @@ class RDC(app_manager.RyuApp):
 
             if src_ip and dst_ip:
                 key = (src_ip, dst_ip)
-                if torid not in self.prev_stats[dpid]:
-                    self.prev_stats[dpid][torid] = {}
-                if torid not in self.traffic_matrix[dpid]:
-                    self.traffic_matrix[dpid][torid] = {}
                 
-                prev_byte_count = self.prev_stats.get(key, 0)
-                delta = byte_count - prev_byte_count
-                if delta < 0:
-                    delta = byte_count
-                
-                self.prev_stats[dpid][torid][key] = byte_count
-                self.traffic_matrix[dpid][torid][key] = (
-                    self.traffic_matrix[dpid][torid].get(key, 0) + delta
-                )
+                with self.lock:
+                    if torid not in self.prev_stats[dpid]:
+                        self.prev_stats[dpid][torid] = {}
+                    if torid not in self.traffic_matrix[dpid]:
+                        self.traffic_matrix[dpid][torid] = {}
+                    
+                    prev_byte_count = self.prev_stats.get(key, 0)
+                    delta = byte_count - prev_byte_count
+                    if delta < 0:
+                        delta = byte_count
+                    
+                    self.prev_stats[dpid][torid][key] = byte_count
+                    self.traffic_matrix[dpid][torid][key] = (
+                        self.traffic_matrix[dpid][torid].get(key, 0) + delta
+                    )
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         LOG.info("Build Packets for Swiich %d", dpid)

@@ -110,7 +110,7 @@ func (p *Processor) CreateForwardingTables() error {
 							ocs.PortServerConn[ocs_port].Server[sw.PortConnToMap[in_port].Device] = true
 
 							if err := setOcsNxtSwitch(self, ocs, ocs_port); err != nil {
-								logger.ProcessorLog.Errorf("Error setting OCS [%s] Port [%d] -> [%s] Port [%d]: ", ocs.Name, ocs_port, connTo.Device, connTo.Port, err)
+								// logger.ProcessorLog.Errorf("Error setting OCS [%s] Port [%d] -> [%s] Port [%d]: ", ocs.Name, ocs_port, connTo.Device, connTo.Port, err)
 								return err
 							}
 
@@ -236,6 +236,7 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 
 				for i := range 2 {
 					src_tor := tors[i]
+					src_sw := self.Switches[src_tor.Device]
 					dst_tor_servers := tor_servers[1-i]
 					tor_ocs_port := conn_to_ocs_port[i]
 
@@ -246,7 +247,6 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 							logger.ProcessorLog.Debugf("[%s] Port [%d] and Port [%d] both connect to OCS [%s], skip ", src_tor.Name, tor_server_port, tor_ocs_port, ocs.Name)
 							continue
 						} else {
-							src_sw := self.Switches[src_tor.Device]
 							src_servers := src_tor.PortServerConn[tor_server_port].Server
 							for src_server, ok := range src_servers {
 								if ok {
@@ -318,7 +318,7 @@ func (p *Processor) setupForwardingTable() {
 	for _, sw := range self.Switches {
 
 		for torId, torRules := range sw.ForwardingRule {
-			for _, rule := range torRules {
+			for rule_name, rule := range torRules {
 				in_port := make([]int, 0)
 				out_port := make([]int, 0)
 
@@ -371,6 +371,8 @@ func (p *Processor) setupForwardingTable() {
 						delete_out_port_ip = append(delete_out_port_ip, rule.DestPort)
 						delete_src_ips = append(delete_src_ips, rule.SrcIp)
 						delete_dst_ips = append(delete_dst_ips, rule.DstIp)
+
+						delete(sw.ForwardingRule[torId], rule_name)
 					} else {
 						delete_in_port = append(delete_in_port, rule.SrcPort)
 						delete_out_port = append(delete_out_port, rule.DestPort)
@@ -385,7 +387,7 @@ func (p *Processor) setupForwardingTable() {
 				}
 
 				if len(create_in_port_ip) != 0 && len(create_out_port_ip) != 0 {
-					logger.ProcessorLog.Infof("Update Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
+					logger.ProcessorLog.Infof("Create Forwarding Table with IP: %d, In Port %d, Out Port %d, Src %v, Dst %v", sw.Id, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
 
 					forwarder.CreateForwardingTable(sw.Id, torId, create_in_port_ip, create_out_port_ip, create_src_ips, create_dst_ips)
 				}
