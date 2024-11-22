@@ -154,8 +154,8 @@ class RDCController(ControllerBase):
         if dpid not in self.rdc_app.traffic_matrix:
             self.rdc_app.traffic_matrix[dpid] = {}
             
-            if torid not in self.rdc_app.traffic_matrix[dpid]:
-                self.rdc_app.traffic_matrix[dpid][torid] = {}
+        if torid not in self.rdc_app.traffic_matrix[dpid]:
+            self.rdc_app.traffic_matrix[dpid][torid] = {}
 
         # Convert the traffic matrix for the specific torid to JSON
         src_dict = self.rdc_app.traffic_matrix[dpid][torid]
