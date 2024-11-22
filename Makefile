@@ -48,16 +48,9 @@ clean:
 # tmux Management Targets
 # =============================
 
-# Target to start tmux session with two panes
-.PHONY: run_tmux
-run_tmux: build
-	echo "Creating new tmux session '$(SESSION_NAME)'..."; \
-	# Start new tmux session detached with the first pane running OCSS_CMD
-	tmux new-session -d -s $(SESSION_NAME) -n main '$(RYU_CMD)'; \
-	sleep 1; \
-	# Split window horizontally and run RYU_CMD in the new pane
-	tmux split-window -h -t $(SESSION_NAME):main 'bash -c "$(OCSS_CMD)"'; \
-	# Select tiled layout for better visibility
-	tmux select-layout -t $(SESSION_NAME) tiled; \
-	# Attach to the newly created session
-	tmux attach -t $(SESSION_NAME); \
+.PHONY: run
+run: build
+	@echo "Running RYU_CMD and OCSS_CMD in the same console..."
+	@$(RYU_CMD) & \
+	sleep 3; \
+	$(OCSS_CMD)
