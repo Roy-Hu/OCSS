@@ -70,7 +70,7 @@ func (p *Processor) CreateForwardingTables() error {
 			// ocs logically connects to the server
 			// ocs_port is the port in ocs that connects to the server
 			if self.DeviceType[connTo.Device] == ocss_context.SERVER {
-				logger.ProcessorLog.Infof("OCS [%s] Port [%d] -> [%s] Port [%d]", ocs.Name, ocs_port, connTo.Device, connTo.Port)
+				logger.ProcessorLog.Debugf("OCS [%s] Port [%d] -> [%s] Port [%d]", ocs.Name, ocs_port, connTo.Device, connTo.Port)
 
 				// TODO: Support two or more switch between ocs and server
 				server := connTo.Device
@@ -93,7 +93,7 @@ func (p *Processor) CreateForwardingTables() error {
 
 						// switch port connects to the current ocs
 						if sw_connTo.Device == ocs.Device && sw_connTo.Port == ocs_port {
-							logger.ProcessorLog.Infof("OCS [%s] Port [%d] -> Switch [%s] Port [%d]", ocs.Name, ocs_port, device, port)
+							logger.ProcessorLog.Debugf("OCS [%s] Port [%d] -> Switch [%s] Port [%d]", ocs.Name, ocs_port, device, port)
 							out_port := port
 
 							// the in port connects to the server and the out port connects to the ocs beed to be treated as a psycial link
@@ -195,7 +195,7 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 		// ocs without logical connection to the server wull be the core
 		setup := make(map[int]bool)
 		if core_ocs[ocs.Name] {
-			logger.ProcessorLog.Infof("OCS [%s] Update Forwarding Table", ocs.Name)
+			logger.ProcessorLog.Debugf("OCS [%s] Update Forwarding Table", ocs.Name)
 
 			for i := range len(ocs.Conn.In_port) {
 				inPort := ocs.Conn.In_port[i]
@@ -207,7 +207,7 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 					setup[outPort] = true
 				}
 
-				logger.ProcessorLog.Infof("OCS [%s] Connection Port [%d](Connect to %s %d) <-> Port [%d](Connect to %s %d)",
+				logger.ProcessorLog.Debugf("OCS [%s] Connection Port [%d](Connect to %s %d) <-> Port [%d](Connect to %s %d)",
 					ocs.Name, inPort, ocs.PortConnToMap[inPort].Name, ocs.PortConnToMap[inPort].Port, outPort, ocs.PortConnToMap[outPort].Name, ocs.PortConnToMap[outPort].Port)
 
 				ports := []int{inPort, outPort}
@@ -255,11 +255,11 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 										dst_server_ip := self.Servers[dst_server].Ip
 										// src server -> src tor -> ocs -> dst tor -> dst server
 										src_sw.AddForwardingRule(src_tor.Id, tor_server_port, tor_ocs_port, src_server_ip, dst_server_ip)
-										logger.ProcessorLog.Infof("Server[%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[src_server].Ip, src_tor.Name, tor_server_port, tor_ocs_port, dst_server_ip)
+										logger.ProcessorLog.Debugf("Server[%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[src_server].Ip, src_tor.Name, tor_server_port, tor_ocs_port, dst_server_ip)
 
 										// dst server -> dst tor -> ocs -> src tor -> src server
 										src_sw.AddForwardingRule(src_tor.Id, tor_ocs_port, tor_server_port, dst_server_ip, src_server_ip)
-										logger.ProcessorLog.Infof("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[dst_server].Ip, src_tor.Name, tor_ocs_port, tor_server_port, src_server_ip)
+										logger.ProcessorLog.Debugf("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[dst_server].Ip, src_tor.Name, tor_ocs_port, tor_server_port, src_server_ip)
 									}
 								}
 							}

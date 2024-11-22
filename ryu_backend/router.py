@@ -29,7 +29,6 @@ class RDCController(ControllerBase):
         try:
             body = req.body.decode('utf-8') if req.body else ''
             data = json.loads(body) if body else {}
-            logger.RouterLog.debug("Request JSON payload: %s", data)
         except json.JSONDecodeError as e:
             logger.RouterLog.error("JSON decode error: %s", e)
             return Response(status=400, body='Invalid JSON payload')
@@ -75,7 +74,7 @@ class RDCController(ControllerBase):
             "switchPorts": [9, 111, 69]
         }
         """
-        logger.RouterLog.debug("Set Switch Info")
+        logger.RouterLog.info("Set Switch Info")
         dpid_str = kwargs['dpid']
         dpid = dpid_lib.str_to_dpid(dpid_str)  # Convert string to integer dpid
 
@@ -142,7 +141,7 @@ class RDCController(ControllerBase):
 
     @route('rdc', delete_url_forwarding_table, methods=['POST'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def delete_forwarding_table(self, req, **kwargs):
-        logger.RouterLog.info("Update Forwarding Table")
+        logger.RouterLog.info("Delete Forwarding Table")
         return self.set_forwarding_table(self.rdc_app.DELETE, req, **kwargs)
     
     @route('rdc', get_traffic_matrix_url, methods=['GET'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
@@ -202,7 +201,7 @@ class RDCController(ControllerBase):
 
         try:
             self.rdc_app.build_packets(dpid, torid, forwardingTable, cmd)
-            logger.RouterLog.info("Successfully built packets for dpid %s", dpid_str)
+            logger.RouterLog.debug("Successfully built packets for dpid %s", dpid_str)
         except Exception as e:
             logger.RouterLog.Error("Error building packets for dpid %s: %s", dpid_str, e)
             return Response(status=500, body='Internal Server Error while building packets')

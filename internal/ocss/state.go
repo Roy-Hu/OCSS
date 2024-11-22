@@ -30,7 +30,6 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 		newConn.Out_port[len(user.OCSs["ocs_edge"].Conn.Out_port)-1] = first_out_port
 
 		traffic := s.GetTraffic("tor1")
-		logger.ActionLog.Errorf("Traffic: %v", traffic)
 		for srcIp, dstIpByte := range traffic {
 			for dstIp, bytes := range dstIpByte {
 				logger.ActionLog.Infof("Traffic from %s to %s: %d bytes", srcIp, dstIp, bytes)

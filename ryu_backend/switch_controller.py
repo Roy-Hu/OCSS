@@ -239,7 +239,7 @@ class RDC(app_manager.RyuApp):
             hub.sleep(1) 
 
     def request_flow_stats(self, datapath):
-        logger.SwitchLog.info("Request flow stats for dpid %d", datapath.id)
+        logger.SwitchLog.debug("Request flow stats for dpid %d", datapath.id)
         parser = datapath.ofproto_parser
 
         req=parser.OFPFlowStatsRequest(datapath)
@@ -261,10 +261,11 @@ class RDC(app_manager.RyuApp):
             byte_count = stat.byte_count
             src_ip = match.get('ipv4_src')
             dst_ip = match.get('ipv4_dst')
-
-            logger.SwitchLog.info(
-                "Cookie Flow %d stats for dpid %d: %s -> %s: %d bytes",
-                stat.cookie, dpid, src_ip, dst_ip, byte_count
+            in_port = match.get('in_port')
+                                    
+            logger.SwitchLog.debug(
+                "stats for dpid %d: in port %s ip %s -> %s: %d bytes",
+                dpid, in_port, src_ip, dst_ip, byte_count
             )
 
             if src_ip and dst_ip:

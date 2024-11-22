@@ -21,8 +21,8 @@ class CustomFormatter(logging.Formatter):
         "ERROR": Fore.RED,
         "WARNING": Fore.YELLOW,
         "WARN": Fore.YELLOW,  # To handle both 'WARNING' and 'WARN'
-        "INFO": Fore.BLUE + Style.BRIGHT,
-        "DEBUG": Fore.CYAN,
+        "INFO": Fore.CYAN,
+        "DEBUG": Fore.WHITE,
         "TRACE": Fore.WHITE,
     }
 
@@ -135,10 +135,11 @@ class LoggerManager(object):
             os.makedirs(log_directory)
 
         # Define specific loggers
-        self.setup_logger("SwitchLog", "Switch", log_file="{}/Switch.log".format(log_directory))
-        self.setup_logger("OcsLog", "OCS", log_file="{}/OCS.log".format(log_directory))
-        self.setup_logger("RouterLog", "Router", log_file="{}/Router.log".format(log_directory))
-        self.setup_logger("MainLog", "Main", log_file="{}/Main.log".format(log_directory))
+        # TODO: logging levels should be set by config
+        self.setup_logger("SwitchLog", "Switch", log_file="{}/Switch.log".format(log_directory), level=logging.INFO)
+        self.setup_logger("OcsLog", "OCS", log_file="{}/OCS.log".format(log_directory), level=logging.INFO)
+        self.setup_logger("RouterLog", "Router", log_file="{}/Router.log".format(log_directory), level=logging.INFO)
+        self.setup_logger("MainLog", "Main", log_file="{}/Main.log".format(log_directory), level=logging.INFO)
 
 # Singleton instance of LoggerManager
 logger = LoggerManager(nf="RYU")
