@@ -48,9 +48,10 @@ clean:
 # tmux Management Targets
 # =============================
 
-.PHONY: run
-run: build
-	@echo "Running RYU_CMD and OCSS_CMD in the same console..."
-	@$(RYU_CMD) & \
-	sleep 3; \
-	$(OCSS_CMD)
+.PHONY: run_ryu
+run_ryu: build
+	@$(RYU_CMD)
+
+.PHONY: run_ocss
+run_ocss: build
+	@$(OCSS_CMD)
