@@ -1,22 +1,25 @@
-from pickle import TRUE
-from ryu.base import app_manager
-from ryu.controller import dpset
-from ryu.controller import ofp_event
+
 from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_3
-from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet
+from ryu_backend.router import RDCController
 from ryu.app.wsgi import WSGIApplication
-import copy
-from ofdpa.config_parser import ConfigParser
-from ofdpa.mods import Mods
+from ryu.ofproto import ofproto_v1_3
+from ryu.controller import ofp_event
+from ryu.lib.packet import ethernet
+from ryu.lib.packet import packet
+from ryu.base import app_manager
+from ryu.controller import dpset
 from ryu.lib import hub
 
-from ryu_backend.router import RDCController
-from log import LOG
-from collections import defaultdict
+from ofdpa.config_parser import ConfigParser
+from ofdpa.mods import Mods
+
+from ocs.connections import GxcConnections
+from ocs.optionsForShareBackup import Options
+
+from logger import logger
 import signal
+import copy
 
 rdc_instance_name = 'rdc_app'
 
@@ -26,7 +29,7 @@ class RDC(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(RDC, self).__init__(*args, **kwargs)
-        LOG.info("RDC Init")
+        logger.MainLog.info("RDC Init")
 
         self.CREATE = "create"
         self.UPDATE = "update"
@@ -74,7 +77,7 @@ class RDC(app_manager.RyuApp):
 
     def _register_signal_handler(self):
         def shutdown_handler(signum, frame):
-            LOG.info("Shutdown signal received. Cleaning up flows...")
+            logger.MainLog.info("Shutdown signal received. Cleaning up flows...")
             self.cleanup_flows()
             
             for dpid in self.monitor_threads:
@@ -89,10 +92,10 @@ class RDC(app_manager.RyuApp):
             hub.sleep(1)
             
     def cleanup_flows(self):
-        LOG.info("TODO: Deleting all flows")
+        logger.MainLog.info("TODO: Deleting all flows")
 
     def create_group_l2_interface(self, template, dp, vlan, outputPort):
-        LOG.info("Create Group L2 Interface for dpid %d port %d", dp.id, outputPort)
+        logger.SwitchLog.info("Create Group L2 Interface for dpid %d port %d", dp.id, outputPort)
         group_l2_interface = copy.deepcopy(template)
         group_l2_interface['group_mod']['_name'] += "%03x%04x" % (vlan, outputPort)
         group_l2_interface['group_mod']['group_id'] += "%03x%04x" % (vlan, outputPort)
@@ -115,7 +118,7 @@ class RDC(app_manager.RyuApp):
 
     @staticmethod
     def install_flow_mod(dp, config):
-        LOG.debug("Install Flow Mod")
+        logger.SwitchLog.debug("Install Flow Mod")
         for type_ in ConfigParser.get_config_type(config):
             if type_ == "flow_mod":
                 mod_config = ConfigParser.get_flow_mod(config)
@@ -127,7 +130,7 @@ class RDC(app_manager.RyuApp):
         return None
 
     def set_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, cmd, priority=3):
-        LOG.info("Create ACL Unicast for port %d <-> port %d", inPort, outputPort)
+        logger.SwitchLog.info("Create ACL Unicast for port %d <-> port %d", inPort, outputPort)
         
         acl_unicast = copy.deepcopy(self.configVlanInPort)
         acl_unicast['flow_mod']['_name'] += str(vlan) + '_' + str(inPort) + '_' + str(outputPort)
@@ -161,34 +164,34 @@ class RDC(app_manager.RyuApp):
         self.install_flow_mod(dp, acl_unicast)
         return acl_unicast
     def create_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, priority=3):
-        LOG.info("Create ACL Unicast port %d -> %d", inPort, outputPort)
+        logger.SwitchLog.info("Create ACL Unicast port %d -> %d", inPort, outputPort)
         return self.set_acl_unicast_vlan_inPort(dp, vlan, inPort, outputPort, 'add', priority)
     
     def delete_acl_unicast_vlan_inPort(self, dp, vlan, inPort, outputPort, priority=3):
-        LOG.info("Delete ACL Unicast port %d -> %d", inPort, outputPort)
+        logger.SwitchLog.info("Delete ACL Unicast port %d -> %d", inPort, outputPort)
         return self.set_acl_unicast_vlan_inPort(dp, vlan, inPort, outputPort, 'del', priority)
     
     def create_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
-        LOG.info("Create ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort, srcIp, dstIp)
+        logger.SwitchLog.info("Create ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort, srcIp, dstIp)
         return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outputPort, 'add', priority)
 
     def update_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
-        LOG.info("Update ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
+        logger.SwitchLog.info("Update ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
         return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outputPort, 'mod', priority)
     
     def delete_acl_unicast_vlan_inPort_srcIp_dstIp(self, dp, torid, vlan, inPort, srcIp, dstIp, outputPort, priority=3):
-        LOG.info("Delete ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
+        logger.SwitchLog.info("Delete ACL Unicast port %d -> %d, Src IP %s, Dst Ip %s", inPort, outputPort,  srcIp, dstIp)
         return self.set_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outputPort, 'del', priority)
     
     def createGroupInterfaces(self, dp, hostPorts, switchPorts, vlan=10):
-        LOG.info("Create Group Interface for ports")
+        logger.SwitchLog.info("Create Group Interface for ports")
         for port in hostPorts:
             self.create_group_l2_interface(self.groupConfigPopVlan, dp, vlan, port)
         for port in switchPorts:
             self.create_group_l2_interface(self.groupConfig, dp, vlan, port)
 
     def create_vlan(self, dp, vlan, inPort):
-        LOG.debug("Create Vlan %d for port %s", vlan, str(inPort))
+        logger.SwitchLog.debug("Create Vlan %d for port %s", vlan, str(inPort))
         vlan_tagged = copy.deepcopy(self.configVlanTagged)
         vlan_tagged['flow_mod']['_name'] += str(vlan) + "_" + str(inPort)
         vlan_tagged['flow_mod']['match']['in_port'] += str(inPort)
@@ -204,18 +207,18 @@ class RDC(app_manager.RyuApp):
         return
 
     def tagVlan(self, dp, ports, vlan=10):
-        LOG.info("Tag Vlan")
+        logger.SwitchLog.info("Tag Vlan")
         # TODO
         for inPort in ports:
             self.create_vlan(dp, vlan, inPort)
 
     def init_switch(self, dpid, hostPorts, switchPorts, vlan = 10):
-        LOG.info("Initializing switch with dpid %d", dpid)
+        logger.SwitchLog.info("Initializing switch with dpid %d", dpid)
         
         while True:
             if dpid in self.dataPaths:
                 break
-            LOG.info("Waiting for datapath %d to connect, retry after 1 sec", dpid)
+            logger.SwitchLog.info("Waiting for datapath %d to connect, retry after 1 sec", dpid)
             hub.sleep(1)
         
         dp = self.dataPaths[dpid]
@@ -230,13 +233,13 @@ class RDC(app_manager.RyuApp):
             self.monitor_threads[dpid] = hub.spawn(self._monitor, dp)
 
     def _monitor(self, datapath):
-        LOG.info("Starting monitoring thread for dpid %d", datapath.id)
+        logger.SwitchLog.info("Starting monitoring thread for dpid %d", datapath.id)
         while True:
             self.request_flow_stats(datapath)
             hub.sleep(1) 
 
     def request_flow_stats(self, datapath):
-        LOG.info("Request flow stats for dpid %d", datapath.id)
+        logger.SwitchLog.info("Request flow stats for dpid %d", datapath.id)
         parser = datapath.ofproto_parser
 
         req=parser.OFPFlowStatsRequest(datapath)
@@ -259,7 +262,7 @@ class RDC(app_manager.RyuApp):
             src_ip = match.get('ipv4_src')
             dst_ip = match.get('ipv4_dst')
 
-            LOG.info(
+            logger.SwitchLog.info(
                 "Cookie Flow %d stats for dpid %d: %s -> %s: %d bytes",
                 stat.cookie, dpid, src_ip, dst_ip, byte_count
             )
@@ -284,14 +287,14 @@ class RDC(app_manager.RyuApp):
                     )
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
-        LOG.info("Build Packets for Swiich %d", dpid)
+        logger.SwitchLog.info("Build Packets for Swiich %d", dpid)
         
         dp = self.dataPaths.get(dpid)
         if dp is None:
-            LOG.info("Cannot find %d", dpid)
+            logger.SwitchLog.info("Cannot find %d", dpid)
         
         if dpid not in self.switchs:
-            LOG.info("Switch %d not initialized", dpid)
+            logger.SwitchLog.info("Switch %d not initialized", dpid)
             return
         
         for (inPort, srcIp, dstIp), outPort in forwardingTable.items():
@@ -317,10 +320,10 @@ class RDC(app_manager.RyuApp):
         dp = ev.dp
         dpid = dp.id
         if ev.enter:
-            LOG.info("Datapath connected: %d", dpid)
+            logger.SwitchLog.info("Datapath connected: %d", dpid)
             self.dataPaths[dpid] = dp
         else:
-            LOG.info("Datapath disconnected: %d", dpid)
+            logger.SwitchLog.info("Datapath disconnected: %d", dpid)
             if dpid in self.dataPaths:
                 del self.dataPaths[dpid]
             if dpid in self.monitor_threads:
@@ -334,7 +337,7 @@ class RDC(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
-        LOG.info("Event Datapath Id: %i", ev.msg.datapath.id)
+        logger.SwitchLog.info("Event Datapath Id: %i", ev.msg.datapath.id)
 
         msg = ev.msg
         datapath = msg.datapath
@@ -342,19 +345,17 @@ class RDC(app_manager.RyuApp):
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
-        LOG.info("Packet in on DPID %s (port %s): %s", datapath.id, in_port, eth)
+        logger.SwitchLog.info("Packet in on DPID %s (port %s): %s", datapath.id, in_port, eth)
 
     def run_OCS_create_initial_connections(self, ocs_in_port, ocs_out_port):
         hub.spawn(self.OCS_create_initial_connections, ocs_in_port, ocs_out_port)
         
     def OCS_create_initial_connections(self, ocs_in_port, ocs_out_port):
-        from ocs.connections import GxcConnections
-        from ocs.optionsForShareBackup import Options
-        LOG.info("OCS_create_initial_connections")
+        logger.OcsLog.info("OCS_create_initial_connections")
         # PrintConnections(LOG, self.ocs_in_port, self.ocs_out_port)
         
-        LOG.info("In Port: %s", ocs_in_port)
-        LOG.info("Out Port: %s", ocs_out_port)
+        logger.OcsLog.info("In Port: %s", ocs_in_port)
+        logger.OcsLog.info("Out Port: %s", ocs_out_port)
         if self.connectionObj is None:
             self.connectionObj = GxcConnections(Options())
         
