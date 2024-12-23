@@ -262,12 +262,7 @@ class RDC(app_manager.RyuApp):
             src_ip = match.get('ipv4_src')
             dst_ip = match.get('ipv4_dst')
             in_port = match.get('in_port')
-                                    
-            logger.SwitchLog.debug(
-                "stats for dpid %d: in port %s ip %s -> %s: %d bytes",
-                dpid, in_port, src_ip, dst_ip, byte_count
-            )
-
+                                            
             if src_ip and dst_ip:
                 key = (src_ip, dst_ip)
                 
@@ -277,15 +272,15 @@ class RDC(app_manager.RyuApp):
                     if torid not in self.traffic_matrix[dpid]:
                         self.traffic_matrix[dpid][torid] = {}
                     
-                    prev_byte_count = self.prev_stats.get(key, 0)
+                    prev_byte_count = self.prev_stats[dpid][torid].get(key, 0)
                     delta = byte_count - prev_byte_count
                     if delta < 0:
                         delta = byte_count
                     
                     self.prev_stats[dpid][torid][key] = byte_count
-                    self.traffic_matrix[dpid][torid][key] = (
-                        self.traffic_matrix[dpid][torid].get(key, 0) + delta
-                    )
+                    self.traffic_matrix[dpid][torid][key] = self.traffic_matrix[dpid][torid].get(key, 0) + delta
+
+
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         logger.SwitchLog.info("Build Packets for Swiich %d", dpid)

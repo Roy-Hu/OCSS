@@ -81,7 +81,17 @@ func (s *StateController) runState(parentCtx context.Context, stateName string, 
 func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 	logger.StateLog.Info("State Controller is running")
 
+	wg.Add(1)
+	go func(ctx context.Context, wg *sync.WaitGroup) {
+		defer wg.Done()
+
+		s.Processor().MonitorTraffic(ctx)
+	}(ctx, wg)
+
 	self := ocss_context.GetSelf()
+
+	go dispatchThresholdEvents(self)
+
 	self.States = s.setupStates(self.UserView)
 	for stateName, state := range self.States {
 		if state.InitState {
@@ -98,10 +108,9 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 					}
 
 					nextState := s.runState(ctx, currentStateName, currentState)
-					logger.StateLog.Infof("State [%s] transitioning to [%s]", currentStateName, nextState)
+					logger.StateLog.Errorf("State [%s] transitioning to [%s]", currentStateName, nextState)
 
 					if nextState == "" {
-						// Shutdown was initiated or no transition specified
 						break
 					}
 					// ocss_context.PrintFowardingRule()
@@ -115,23 +124,67 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (s *StateController) GetTraffic(tor string) ocss_context.TrafficMatrix {
-	self := ocss_context.GetSelf()
-	processor := s.Processor()
+func dispatchThresholdEvents(self *ocss_context.OCSSContext) {
+	for event := range self.ThresholdEvents {
+		self.ThresholdMu.Lock()
+		key := ocss_context.ThresholdKey{
+			ToR:            event.ToR,
+			ThresholdValue: event.ThresholdValue,
+		}
+		if subCh, ok := self.ThresholdSubscribers[key]; ok {
+			// Non-blocking send to subscriber
+			select {
+			case subCh <- event:
+			default:
+				// If channel is full, choose to drop or log
+				logger.StateLog.Warnf("Dropping threshold event [%s, %d]", event.ToR, event.ThresholdValue)
 
-	if _, ok := self.UserView.ToRs[tor]; !ok {
-		logger.StateLog.Errorf("ToR %s does not exist", tor)
-		return nil
+			}
+		}
+		self.ThresholdMu.Unlock()
 	}
+}
 
-	sw := self.UserView.ToRs[tor].Device
-	if _, ok := self.Switches[self.UserView.ToRs[tor].Device]; !ok {
-		logger.StateLog.Errorf("Switch %s does not exist", sw)
-		return nil
+func subscribeToThreshold(self *ocss_context.OCSSContext, tor string, val int) chan ocss_context.ThresholdEvent {
+	self.ThresholdMu.Lock()
+	defer self.ThresholdMu.Unlock()
+	key := ocss_context.ThresholdKey{ToR: tor, ThresholdValue: val}
+	ch := make(chan ocss_context.ThresholdEvent, 1) // buffer size as needed
+	self.ThresholdSubscribers[key] = ch
+	return ch
+}
+
+func createThresholdTrigger(tor string, val int) func(ctx context.Context) bool {
+	return func(ctx context.Context) bool {
+		self := ocss_context.GetSelf()
+		key := ocss_context.ThresholdKey{ToR: tor, ThresholdValue: val}
+		subCh := subscribeToThreshold(self, tor, val)
+
+		// Ensure that once this trigger is done (whether it fires or the context is done),
+		// we remove the subscription from the map.
+		defer func() {
+			self.ThresholdMu.Lock()
+			delete(self.ThresholdSubscribers, key)
+			self.ThresholdMu.Unlock()
+
+			// It's optional to close the channel. If no other goroutines read from it,
+			// closing is a good idea.
+			close(subCh)
+		}()
+
+		select {
+		case event := <-subCh:
+			// Only triggered when this specific threshold event occurs
+			if event.ToR == tor && event.ThresholdValue == val {
+				return true
+			} else {
+				logger.StateLog.Warnf("Threshold event [%s, %d] does not match trigger [%s, %d]",
+					event.ToR, event.ThresholdValue, tor, val)
+				return false
+			}
+		case <-ctx.Done():
+			// Context cancelled or ended, no event triggered
+			return false
+		}
 	}
-
-	swid := self.Switches[sw].Id
-	torid := self.UserView.ToRs[tor].Id
-
-	return processor.GetTraffic(swid, torid)
 }

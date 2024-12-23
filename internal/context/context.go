@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/comp590/ocss/internal/logger"
 	"github.com/comp590/ocss/pkg/factory"
@@ -36,6 +37,10 @@ type OCSSContext struct {
 	DeviceType map[string]DeviceType
 	UserView   *UserView
 	States     map[string]*State
+
+	ThresholdEvents      chan ThresholdEvent
+	ThresholdSubscribers map[ThresholdKey]chan ThresholdEvent
+	ThresholdMu          sync.Mutex
 }
 
 type ConnServerInfo struct {
@@ -72,6 +77,17 @@ type Link struct {
 	DestPort    int
 }
 
+type ThresholdEvent struct {
+	ToR            string
+	SurpassedValue int
+	ThresholdValue int
+}
+
+type ThresholdKey struct {
+	ToR            string
+	ThresholdValue int
+}
+
 func Init() error {
 	ocssContext = OCSSContext{
 		Switches:   make(map[string]*Switch),
@@ -82,6 +98,8 @@ func Init() error {
 			OCSs: make(map[string]*OCS),
 			ToRs: make(map[string]*ToR),
 		},
+		ThresholdEvents:      make(chan ThresholdEvent, 50),
+		ThresholdSubscribers: make(map[ThresholdKey]chan ThresholdEvent),
 	}
 
 	configuration := factory.OcssConfig.Configuration
