@@ -82,33 +82,6 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 				logger.ProcessorLog.Debugf("Monitor Traffic: Switch %d, ToR %s, traffic %v", swid, torName, traffic)
 			}
 
-			// Check each subscribed threshold
-			self.ThresholdMu.Lock()
-			for tk := range self.ThresholdSubscribers {
-				traffic, ok := torTraffic[tk.ToR]
-				if !ok {
-					// No traffic recorded for this ToR or it doesn't exist
-					continue
-				}
-
-				if traffic > tk.ThresholdValue {
-					// Traffic surpassed the threshold defined by ThresholdKey tk
-					event := ocss_context.ThresholdEvent{
-						ToR:            tk.ToR,
-						SurpassedValue: traffic,
-						ThresholdValue: tk.ThresholdValue,
-					}
-					select {
-					case self.ThresholdEvents <- event:
-						logger.ProcessorLog.Infof("Traffic %v on ToR %s surpassed threshold %v. Event sent.",
-							traffic, tk.ToR, tk.ThresholdValue)
-					default:
-						logger.ProcessorLog.Warnf("Threshold notification channel is full.")
-					}
-				}
-			}
-			self.ThresholdMu.Unlock()
-
 		case <-ctx.Done():
 			logger.ProcessorLog.Infof("Monitor Traffic is stopping")
 			return
