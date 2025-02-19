@@ -275,7 +275,7 @@ class RDC(app_manager.RyuApp):
                     prev_byte_count = self.prev_stats[dpid][torid].get(key, 0)
                     delta = byte_count - prev_byte_count
                     if delta < 0:
-                        delta = byte_count
+                        continue
                     
                     self.prev_stats[dpid][torid][key] = byte_count
                     self.traffic_matrix[dpid][torid][key] = self.traffic_matrix[dpid][torid].get(key, 0) + delta
