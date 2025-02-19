@@ -2,3 +2,4 @@ bin
 .vscode
 ryu_backend/log
 *pyc
+example/allreduce
