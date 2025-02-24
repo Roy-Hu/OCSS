@@ -12,6 +12,7 @@ type ServerApp interface {
 	app.App
 	Processor() *Processor
 	StateController() *StateController
+	HttpServer() *HttpServer
 }
 
 type Server struct {
@@ -32,6 +33,8 @@ func (s *Server) Run(ctx context.Context, wg *sync.WaitGroup) error {
 	s.Processor().CreateForwardingTables()
 
 	s.StateController().Start(ctx, wg)
+
+	s.HttpServer().Start(ctx, wg)
 
 	wg.Wait()
 

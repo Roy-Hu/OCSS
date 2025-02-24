@@ -39,6 +39,10 @@ configuration:
     fowarder:
         name: ryu
         address: http://127.0.0.1:8010
+    appServer:
+      name: app
+      ip: 10.224.92.112
+      port: 8081
   user:
     link:
       - source: server1

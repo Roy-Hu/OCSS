@@ -32,6 +32,7 @@ type SystemApp struct {
 	processor        *ocss.Processor
 	forwarder        *ocss.Forwarder
 	state_controller *ocss.StateController
+	http_server      *ocss.HttpServer
 }
 
 func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*SystemApp, error) {
@@ -68,6 +69,12 @@ func NewApp(ctx context.Context, cfg *factory.Config, tlsKeyLogPath string) (*Sy
 		return sys, err
 	}
 	sys.state_controller = state_controller
+
+	http_server, err := ocss.NewHttpServer(sys)
+	if err != nil {
+		return sys, err
+	}
+	sys.http_server = http_server
 
 	if sys.server, err = ocss.NewServer(sys); err != nil {
 		return nil, err
@@ -180,4 +187,8 @@ func (a *SystemApp) Forwarder() *ocss.Forwarder {
 
 func (a *SystemApp) StateController() *ocss.StateController {
 	return a.state_controller
+}
+
+func (a *SystemApp) HttpServer() *ocss.HttpServer {
+	return a.http_server
 }

@@ -27,6 +27,21 @@ func NewProcessor(ocss ProcessorOCSS) (*Processor, error) {
 	return o, nil
 }
 
+func (p *Processor) Stop() {
+	logger.ProcessorLog.Errorf("OCSS Processor is stopping")
+
+	for _, sw := range ocss_context.GetSelf().Switches {
+		for _, rules := range sw.ForwardingRule {
+			for _, rule := range rules {
+				rule.Status = ocss_context.DELETE
+			}
+		}
+	}
+
+	logger.ProcessorLog.Errorf("Delete all forwarding rules")
+	p.setupForwardingTable()
+}
+
 // ocs_in_port should setup server pointer before calling this function
 // setup the sever pointer for the switch port that connects to the ocs port
 func setOcsNxtSwitch(self *ocss_context.OCSSContext, ocs *ocss_context.OCS, ocs_in_port int) error {

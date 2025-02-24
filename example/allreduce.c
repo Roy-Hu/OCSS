@@ -25,9 +25,18 @@ int main(int argc, char *argv[]) {
         local_matrix[i] = 1.0;
     }
 
+    if (rank == 0) {
+        system("curl -v -X POST -H \"Content-Type: application/json\" -d '{\"192.168.50.111\": [\"192.168.50.147\"], \"192.168.50.147\": [\"192.168.50.111\"]}' http://10.224.92.112:8081/startiter/allreduce/1");
+    } 
+
     // Perform an Allreduce operation using MPI_SUM.
     // This will sum corresponding elements of the matrices from all processes.
     MPI_Allreduce(local_matrix, global_matrix, total_elements, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    sleep(1);
+    
+    if (rank == 0) {
+        system("curl -v -X POST -H \"Content-Type: application/json\" http://10.224.92.112:8081/enditer/allreduce/1");
+    }
 
     // Optionally, print the resulting global matrix on one of the processes.
     if (rank == 0) {

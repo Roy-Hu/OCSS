@@ -65,6 +65,7 @@ type NetworkManager struct {
 	OpticalSwitchs []OpticalSwitch `yaml:"opticalSwitchs" valid:"required"`
 	Servers        []Server        `yaml:"servers" valid:"required"`
 	Links          []Link          `yaml:"links" valid:"required"`
+	AppServer      Server          `yaml:"appServer" valid:"required"`
 }
 
 // Validate validates the NetworkManager struct.

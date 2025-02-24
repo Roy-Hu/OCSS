@@ -18,6 +18,7 @@ var (
 	StateLog     *logrus.Entry
 	SwitchLog    *logrus.Entry
 	ActionLog    *logrus.Entry
+	HttpLog      *logrus.Entry
 )
 
 func init() {
@@ -39,4 +40,5 @@ func init() {
 	StateLog = NfLog.WithField(logger_util.FieldCategory, "State")
 	SwitchLog = NfLog.WithField(logger_util.FieldCategory, "Switch")
 	ActionLog = NfLog.WithField(logger_util.FieldCategory, "Action")
+	HttpLog = NfLog.WithField(logger_util.FieldCategory, "Http")
 }

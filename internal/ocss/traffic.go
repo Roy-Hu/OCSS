@@ -10,6 +10,7 @@ import (
 
 func (p *Processor) getTraffic(swId int, torId int) int {
 	forwarder := p.Forwarder()
+	self := ocss_context.GetSelf()
 
 	traffic, err := forwarder.GetTrafficMatrix(swId, torId)
 	if err != nil {
@@ -18,9 +19,49 @@ func (p *Processor) getTraffic(swId int, torId int) int {
 	}
 
 	tol := 0
-	for _, trafficMap := range traffic {
-		for _, traffic := range trafficMap {
+
+	delta := make(map[string]map[string]int)
+	for srcIp, trafficMap := range traffic {
+		for dstIp, traffic := range trafficMap {
+			if _, ok := delta[srcIp]; !ok {
+				delta[srcIp] = make(map[string]int)
+			}
+
+			if _, ok := self.Traffic[srcIp][dstIp]; ok {
+				if delta[srcIp][dstIp] == 0 {
+					delta[srcIp][dstIp] = traffic - self.Traffic[srcIp][dstIp]
+				} else {
+					delta[srcIp][dstIp] = min(delta[srcIp][dstIp], traffic-self.Traffic[srcIp][dstIp])
+				}
+			} else {
+				if delta[srcIp][dstIp] == 0 {
+					delta[srcIp][dstIp] = traffic
+				} else {
+					delta[srcIp][dstIp] = min(delta[srcIp][dstIp], traffic)
+				}
+			}
+
 			tol += traffic
+		}
+	}
+
+	self.Traffic = traffic
+
+	for _, app := range self.AppServer.View {
+		if app.Active {
+			logger.ProcessorLog.Debugf("App %s, Iter %d, Traffic Matrix %v", app.AppId, app.Iter, app.IterTrafficMatrix[app.Iter])
+			for srcIp, dstIps := range app.IterTrafficMatrix[app.Iter] {
+				if _, ok := delta[srcIp]; !ok {
+					continue
+				}
+				for dstIp := range dstIps {
+					if _, ok := delta[srcIp][dstIp]; ok {
+						logger.ProcessorLog.Debugf("srcIp %s, dstIp %s, delta %d", srcIp, dstIp, delta[srcIp][dstIp])
+						app.IterTrafficMatrix[app.Iter][srcIp][dstIp] += delta[srcIp][dstIp]
+					}
+				}
+
+			}
 		}
 	}
 
@@ -38,25 +79,10 @@ func (p *Processor) updateController() {
 	p.setupForwardingTable()
 }
 
-func (p *Processor) Stop() {
-	logger.ProcessorLog.Errorf("OCSS Processor is stopping")
-
-	for _, sw := range ocss_context.GetSelf().Switches {
-		for _, rules := range sw.ForwardingRule {
-			for _, rule := range rules {
-				rule.Status = ocss_context.DELETE
-			}
-		}
-	}
-
-	logger.ProcessorLog.Errorf("Delete all forwarding rules")
-	p.setupForwardingTable()
-}
-
 func (p *Processor) MonitorTraffic(ctx context.Context) {
 	self := ocss_context.GetSelf()
 
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -79,7 +105,7 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 				traffic := p.getTraffic(swid, torid)
 				torTraffic[torName] = traffic
 
-				logger.ProcessorLog.Debugf("Monitor Traffic: Switch %d, ToR %s, traffic %v", swid, torName, traffic)
+				logger.ProcessorLog.Warnf("Monitor Traffic: Switch %d, ToR %s, traffic %v", swid, torName, traffic)
 			}
 
 		case <-ctx.Done():

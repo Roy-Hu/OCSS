@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/comp590/ocss/internal/logger"
 	"github.com/comp590/ocss/pkg/factory"
@@ -37,10 +36,9 @@ type OCSSContext struct {
 	DeviceType map[string]DeviceType
 	UserView   *UserView
 	States     map[string]*State
-
-	ThresholdEvents      chan ThresholdEvent
-	ThresholdSubscribers map[ThresholdKey]chan ThresholdEvent
-	ThresholdMu          sync.Mutex
+	AppServer  *App
+	Traffic    TrafficMatrix
+	IpToServer map[string]string
 }
 
 type ConnServerInfo struct {
@@ -98,12 +96,14 @@ func Init() error {
 			OCSs: make(map[string]*OCS),
 			ToRs: make(map[string]*ToR),
 		},
-		ThresholdEvents:      make(chan ThresholdEvent, 50),
-		ThresholdSubscribers: make(map[ThresholdKey]chan ThresholdEvent),
+		AppServer: &App{
+			View: make(map[string]*AppView),
+		},
+		IpToServer: make(map[string]string),
 	}
 
 	configuration := factory.OcssConfig.Configuration
-
+	ocssContext.AppServer.Address = configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port)
 	// Initialize servers
 	for _, s := range configuration.NetworkManager.Servers {
 		ocssContext.DeviceType[s.Name] = SERVER
@@ -115,6 +115,8 @@ func Init() error {
 		server.PortConnToMap[s.Port] = &ConnectedTo{}
 
 		ocssContext.Servers[s.Name] = server
+
+		ocssContext.IpToServer[s.IP] = s.Name
 	}
 
 	// Initialize switches
