@@ -236,7 +236,7 @@ class RDC(app_manager.RyuApp):
         logger.SwitchLog.info("Starting monitoring thread for dpid %d", datapath.id)
         while True:
             self.request_flow_stats(datapath)
-            hub.sleep(1) 
+            hub.sleep(0.1) 
 
     def request_flow_stats(self, datapath):
         logger.SwitchLog.debug("Request flow stats for dpid %d", datapath.id)
@@ -252,35 +252,30 @@ class RDC(app_manager.RyuApp):
         dpid = datapath.id
         body = ev.msg.body
 
-        for stat in body:
-            if stat.cookie not in self.tor_tracked_cookies:
-                continue
-            
-            torid = stat.cookie - self.tracked_cookie
-            match = stat.match
-            byte_count = stat.byte_count
-            src_ip = match.get('ipv4_src')
-            dst_ip = match.get('ipv4_dst')
-            in_port = match.get('in_port')
-                                            
-            if src_ip and dst_ip:
-                key = (src_ip, dst_ip)
+        # Acquire the semaphore/lock to ensure concurrency safety
+        with self.lock:
+            for stat in body:
+                # Only process cookies we're tracking
+                if stat.cookie not in self.tor_tracked_cookies:
+                    continue
                 
-                with self.lock:
-                    if torid not in self.prev_stats[dpid]:
-                        self.prev_stats[dpid][torid] = {}
+                torid = stat.cookie - self.tracked_cookie
+                match = stat.match
+                byte_count = stat.byte_count
+                src_ip = match.get('ipv4_src')
+                dst_ip = match.get('ipv4_dst')
+                
+                if src_ip and dst_ip:
+                    # Organize by (dpid -> torid -> (src_ip, dst_ip) -> byte_count)
+                    key = (src_ip, dst_ip)
+                    
+                    if dpid not in self.traffic_matrix:
+                        self.traffic_matrix[dpid] = {}
                     if torid not in self.traffic_matrix[dpid]:
                         self.traffic_matrix[dpid][torid] = {}
                     
-                    prev_byte_count = self.prev_stats[dpid][torid].get(key, 0)
-                    delta = byte_count - prev_byte_count
-                    if delta < 0:
-                        continue
-                    
-                    self.prev_stats[dpid][torid][key] = byte_count
-                    self.traffic_matrix[dpid][torid][key] = self.traffic_matrix[dpid][torid].get(key, 0) + delta
-
-
+                    # Just store the current total (accumulated) byte_count
+                    self.traffic_matrix[dpid][torid][key] = byte_count
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         logger.SwitchLog.info("Build Packets for Swiich %d", dpid)

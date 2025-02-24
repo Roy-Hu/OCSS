@@ -144,30 +144,34 @@ class RDCController(ControllerBase):
         logger.RouterLog.info("Delete Forwarding Table")
         return self.set_forwarding_table(self.rdc_app.DELETE, req, **kwargs)
     
-    @route('rdc', get_traffic_matrix_url, methods=['GET'], requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
+    @route('rdc', get_traffic_matrix_url, methods=['GET'],
+        requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def get_traffic_matrix(self, req, **kwargs):
         dpid_str = kwargs['dpid']
         dpid = int(dpid_str)
         torid_str = kwargs['torid']
         torid = int(torid_str)
 
-        if dpid not in self.rdc_app.traffic_matrix:
-            self.rdc_app.traffic_matrix[dpid] = {}
-            
-        if torid not in self.rdc_app.traffic_matrix[dpid]:
-            self.rdc_app.traffic_matrix[dpid][torid] = {}
+        # Acquire the lock so no other thread writes to traffic_matrix while we read
+        with self.rdc_app.lock:
+            if dpid not in self.rdc_app.traffic_matrix:
+                self.rdc_app.traffic_matrix[dpid] = {}
+            if torid not in self.rdc_app.traffic_matrix[dpid]:
+                self.rdc_app.traffic_matrix[dpid][torid] = {}
 
-        # Convert the traffic matrix for the specific torid to JSON
-        src_dict = self.rdc_app.traffic_matrix[dpid][torid]
-        traffic_matrix_dict = {}
-        for (src_ip, dst_ip), byte_count in src_dict.items():
-            if src_ip not in traffic_matrix_dict:
-                traffic_matrix_dict[src_ip] = {}
-            traffic_matrix_dict[src_ip][dst_ip] = byte_count
+            src_dict = self.rdc_app.traffic_matrix[dpid][torid]
 
-        # Return JSON response
+            # Build JSON structure
+            traffic_matrix_dict = {}
+            for (src_ip, dst_ip), byte_count in src_dict.items():
+                if src_ip not in traffic_matrix_dict:
+                    traffic_matrix_dict[src_ip] = {}
+                traffic_matrix_dict[src_ip][dst_ip] = byte_count
+
+        # Convert to JSON outside the lock (this is just a string operation)
         body = json.dumps(traffic_matrix_dict)
         return Response(content_type='application/json', body=body)
+
 
     def set_forwarding_table(self, cmd, req, **kwargs):
         dpid_str = kwargs['dpid']
