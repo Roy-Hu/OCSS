@@ -205,6 +205,28 @@ func (p *Processor) UpdateForwardingTables() error {
 func updateCoreOCSAndTor(core_ocs map[string]bool) {
 	logger.ProcessorLog.Info("Update Core OCS and ToR")
 	self := ocss_context.GetSelf()
+
+	// setup forwarding table server connects to the same tor
+	for _, tor := range self.UserView.ToRs {
+		sw := self.Switches[tor.Device]
+		for port1, servers1 := range tor.PortServerConn {
+			for server1, ok := range servers1.Server {
+				if ok {
+					for port2, servers2 := range tor.PortServerConn {
+						for server2, ok := range servers2.Server {
+							if ok {
+								if port1 != port2 {
+									sw.AddForwardingRule(tor.Id, port1, port2, self.Servers[server1].Ip, self.Servers[server2].Ip)
+									logger.ProcessorLog.Warnf("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[server1].Ip, tor.Name, port1, port2, self.Servers[server2].Ip)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// for logical core ocs that connects to the switch
 	for _, ocs := range self.UserView.OCSs {
 		// ocs without logical connection to the server wull be the core
