@@ -28,17 +28,9 @@ func (p *Processor) getTraffic(swId int, torId int) int {
 			}
 
 			if _, ok := self.Traffic[srcIp][dstIp]; ok {
-				if delta[srcIp][dstIp] == 0 {
-					delta[srcIp][dstIp] = traffic - self.Traffic[srcIp][dstIp]
-				} else {
-					delta[srcIp][dstIp] = min(delta[srcIp][dstIp], traffic-self.Traffic[srcIp][dstIp])
-				}
+				delta[srcIp][dstIp] += traffic - self.Traffic[srcIp][dstIp]
 			} else {
-				if delta[srcIp][dstIp] == 0 {
-					delta[srcIp][dstIp] = traffic
-				} else {
-					delta[srcIp][dstIp] = min(delta[srcIp][dstIp], traffic)
-				}
+				delta[srcIp][dstIp] += traffic
 			}
 
 			tol += traffic
@@ -57,7 +49,8 @@ func (p *Processor) getTraffic(swId int, torId int) int {
 				for dstIp := range dstIps {
 					if _, ok := delta[srcIp][dstIp]; ok {
 						logger.ProcessorLog.Debugf("srcIp %s, dstIp %s, delta %d", srcIp, dstIp, delta[srcIp][dstIp])
-						app.IterTrafficMatrix[app.Iter][srcIp][dstIp] += delta[srcIp][dstIp]
+						// TODO: This should only record traffic in this iter instead of accumulated traffic
+						app.IterTrafficMatrix[app.Iter][srcIp][dstIp] = traffic[srcIp][dstIp]
 					}
 				}
 
@@ -105,7 +98,7 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 				traffic := p.getTraffic(swid, torid)
 				torTraffic[torName] = traffic
 
-				logger.ProcessorLog.Warnf("Monitor Traffic: Switch %d, ToR %s, traffic %v", swid, torName, traffic)
+				logger.ProcessorLog.Debugf("Monitor Traffic: Switch %d, ToR %s, traffic %v", swid, torName, traffic)
 			}
 
 		case <-ctx.Done():

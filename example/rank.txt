@@ -1,2 +1,6 @@
 rank 0=192.168.50.111 slots=1
-rank 1=192.168.50.147 slots=1
+rank 1=192.168.50.113 slots=1
+rank 2=192.168.50.114 slots=1
+rank 3=192.168.50.147 slots=1
+rank 4=192.168.50.148 slots=1
+rank 5=192.168.50.149 slots=1

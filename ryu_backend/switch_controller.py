@@ -252,30 +252,27 @@ class RDC(app_manager.RyuApp):
         dpid = datapath.id
         body = ev.msg.body
 
-        # Acquire the semaphore/lock to ensure concurrency safety
-        with self.lock:
-            for stat in body:
-                # Only process cookies we're tracking
-                if stat.cookie not in self.tor_tracked_cookies:
-                    continue
+        for stat in body:
+            # Only process cookies we're tracking
+            if stat.cookie not in self.tor_tracked_cookies:
+                continue
+            
+            torid = stat.cookie - self.tracked_cookie
+            if torid == 0:
+                continue
+            
+            match = stat.match
+            byte_count = stat.byte_count
+            src_ip = match.get('ipv4_src')
+            dst_ip = match.get('ipv4_dst')
+            
+            if src_ip and dst_ip:
+                # Organize by (dpid -> torid -> (src_ip, dst_ip) -> byte_count)
+                key = (src_ip, dst_ip)
                 
-                torid = stat.cookie - self.tracked_cookie
-                match = stat.match
-                byte_count = stat.byte_count
-                src_ip = match.get('ipv4_src')
-                dst_ip = match.get('ipv4_dst')
-                
-                if src_ip and dst_ip:
-                    # Organize by (dpid -> torid -> (src_ip, dst_ip) -> byte_count)
-                    key = (src_ip, dst_ip)
-                    
-                    if dpid not in self.traffic_matrix:
-                        self.traffic_matrix[dpid] = {}
-                    if torid not in self.traffic_matrix[dpid]:
-                        self.traffic_matrix[dpid][torid] = {}
-                    
-                    # Just store the current total (accumulated) byte_count
-                    self.traffic_matrix[dpid][torid][key] = byte_count
+                with self.lock:
+                    if key not in self.traffic_matrix[dpid][torid] or self.traffic_matrix[dpid][torid][key] < byte_count:
+                        self.traffic_matrix[dpid][torid][key] = byte_count
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         logger.SwitchLog.info("Build Packets for Swiich %d", dpid)
@@ -295,6 +292,10 @@ class RDC(app_manager.RyuApp):
                     self.create_acl_unicast_vlan_inPort(dp, vlan, outPort, inPort)
                 else:
                     self.create_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outPort)
+                    if dpid not in self.traffic_matrix:
+                        self.traffic_matrix[dpid] = {}
+                    if torid not in self.traffic_matrix[dpid]:
+                        self.traffic_matrix[dpid][torid] = {}
             elif cmd == self.UPDATE:
                 self.update_acl_unicast_vlan_inPort_srcIp_dstIp(dp, torid, vlan, inPort, srcIp, dstIp, outPort)
             elif cmd == self.DELETE:

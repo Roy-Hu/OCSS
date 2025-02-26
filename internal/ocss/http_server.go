@@ -47,14 +47,14 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 	var payload map[string][]string
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&payload); err != nil {
-		logger.HttpLog.Infof("Error decoding JSON payload: %v", err)
+		logger.HttpLog.Errorf("Error decoding JSON payload: %v", err)
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
 
 	iterNum, err := strconv.Atoi(iter)
 	if err != nil {
-		logger.HttpLog.Infof("Error converting iteration number to integer: %v", err)
+		logger.HttpLog.Errorf("Error converting iteration number to integer: %v", err)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
 	}
@@ -121,7 +121,7 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 
 	logger.HttpLog.Infof("Ending iteration %v for app %v", iterNum, appId)
 	logger.HttpLog.Errorf("App %s, Iter %d, Traffic Matrix %v", appId, iterNum, self.AppServer.View[appId].IterTrafficMatrix[iterNum])
-	// self.AppServer.View[appId].ConstructHeapMap()
+	self.AppServer.View[appId].ConstructHeapMap()
 
 	self.AppServer.View[appId].Active = false
 }

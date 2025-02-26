@@ -149,7 +149,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 	states["State1"] = &ocss_context.State{
 		Triggers: []func(ctx context.Context) bool{
 			func(ctx context.Context) bool {
-				ticker := time.NewTicker(30000 * time.Millisecond)
+				ticker := time.NewTicker(30000 * time.Second)
 				defer ticker.Stop()
 
 				select {
