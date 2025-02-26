@@ -59,29 +59,29 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, exists := self.AppServer.View[appId]; !exists {
-		self.AppServer.View[appId] = &ocss_context.AppView{
+	app, exists := self.UserView.AppServer.Apps[appId]
+	if !exists {
+		app = &ocss_context.App{
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
 			AppId:             appId,
 		}
-	} else if self.AppServer.View[appId].Iter != iterNum-1 {
+		self.UserView.AppServer.Apps[appId] = app
+	} else if app.Iter != iterNum-1 {
 		logger.HttpLog.Infof("Invalid iteration number: %v", iterNum)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
 	}
 
-	appView := self.AppServer.View[appId]
-
-	appView.Iter = iterNum
-	appView.IterTrafficMatrix[iterNum] = make(ocss_context.TrafficMatrix)
-	appView.Active = true
+	app.Iter = iterNum
+	app.IterTrafficMatrix[iterNum] = make(ocss_context.TrafficMatrix)
+	app.Active = true
 
 	for srcIp, dstIps := range payload {
 		for _, dstIp := range dstIps {
-			if _, exists := appView.IterTrafficMatrix[iterNum][srcIp]; !exists {
-				appView.IterTrafficMatrix[iterNum][srcIp] = make(map[string]int)
+			if _, exists := app.IterTrafficMatrix[iterNum][srcIp]; !exists {
+				app.IterTrafficMatrix[iterNum][srcIp] = make(map[string]int)
 			}
-			appView.IterTrafficMatrix[iterNum][srcIp][dstIp] = 0
+			app.IterTrafficMatrix[iterNum][srcIp][dstIp] = 0
 		}
 	}
 
@@ -107,23 +107,30 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !self.AppServer.View[appId].Active {
+	app, exists := self.UserView.AppServer.Apps[appId]
+	if !exists {
+		logger.HttpLog.Infof("App %v does not exist", appId)
+		http.Error(w, "App does not exist", http.StatusBadRequest)
+		return
+	}
+
+	if !app.Active {
 		logger.HttpLog.Infof("App is not active")
 		http.Error(w, "App is not active", http.StatusBadRequest)
 		return
 	}
 
-	if self.AppServer.View[appId].Iter != iterNum {
+	if app.Iter != iterNum {
 		logger.HttpLog.Infof("Invalid iteration number: %v", iterNum)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
 	}
 
 	logger.HttpLog.Infof("Ending iteration %v for app %v", iterNum, appId)
-	logger.HttpLog.Errorf("App %s, Iter %d, Traffic Matrix %v", appId, iterNum, self.AppServer.View[appId].IterTrafficMatrix[iterNum])
-	self.AppServer.View[appId].ConstructHeapMap()
+	logger.HttpLog.Errorf("App %s, Iter %d, Traffic Matrix %v", appId, iterNum, app.IterTrafficMatrix[iterNum])
+	app.ConstructHeapMap()
 
-	self.AppServer.View[appId].Active = false
+	app.Active = false
 }
 
 // setupRoutes configures the HTTP routes using Gorilla Mux.
@@ -149,13 +156,13 @@ func (s *HttpServer) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 		// Create a new http.Server so we can manage graceful shutdown
 		srv := &http.Server{
-			Addr:    self.AppServer.Address,
+			Addr:    self.UserView.AppServer.Address,
 			Handler: loggingMiddleware(router),
 		}
 
 		// Start the server in its own goroutine
 		go func() {
-			logger.HttpLog.Infof("Starting OCSS Server %s...", self.AppServer.Address)
+			logger.HttpLog.Infof("Starting OCSS Server %s...", srv.Addr)
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				logger.HttpLog.Errorf("Failed to start server: %v", err)
 			}

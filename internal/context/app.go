@@ -7,18 +7,18 @@ import (
 	"github.com/comp590/ocss/internal/util"
 )
 
-type App struct {
+type AppServer struct {
 	Address string
-	View    map[string]*AppView
+	Apps    map[string]*App
 }
-type AppView struct {
+type App struct {
 	AppId             string
 	IterTrafficMatrix map[int]TrafficMatrix
 	Active            bool
 	Iter              int
 }
 
-func (a *AppView) ConstructHeapMap() {
+func (a *App) ConstructHeapMap() {
 	traffic := make(map[string]map[string]int)
 	for srcIp, dstIps := range a.IterTrafficMatrix[a.Iter] {
 		for dstIp, vol := range dstIps {

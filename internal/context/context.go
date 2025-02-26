@@ -36,8 +36,6 @@ type OCSSContext struct {
 	DeviceType map[string]DeviceType
 	UserView   *UserView
 	States     map[string]*State
-	AppServer  *App
-	Traffic    TrafficMatrix
 	IpToServer map[string]string
 }
 
@@ -87,6 +85,8 @@ type ThresholdKey struct {
 }
 
 func Init() error {
+	configuration := factory.OcssConfig.Configuration
+
 	ocssContext = OCSSContext{
 		Switches:   make(map[string]*Switch),
 		Servers:    make(map[string]*Server),
@@ -95,15 +95,14 @@ func Init() error {
 		UserView: &UserView{
 			OCSs: make(map[string]*OCS),
 			ToRs: make(map[string]*ToR),
-		},
-		AppServer: &App{
-			View: make(map[string]*AppView),
+			AppServer: &AppServer{
+				Apps:    make(map[string]*App),
+				Address: configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port),
+			},
 		},
 		IpToServer: make(map[string]string),
 	}
 
-	configuration := factory.OcssConfig.Configuration
-	ocssContext.AppServer.Address = configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port)
 	// Initialize servers
 	for _, s := range configuration.NetworkManager.Servers {
 		ocssContext.DeviceType[s.Name] = SERVER

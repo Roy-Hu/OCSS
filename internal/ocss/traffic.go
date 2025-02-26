@@ -27,8 +27,8 @@ func (p *Processor) getTraffic(swId int, torId int) int {
 				delta[srcIp] = make(map[string]int)
 			}
 
-			if _, ok := self.Traffic[srcIp][dstIp]; ok {
-				delta[srcIp][dstIp] += traffic - self.Traffic[srcIp][dstIp]
+			if _, ok := (*self.UserView.Traffic)[srcIp][dstIp]; ok {
+				delta[srcIp][dstIp] += traffic - (*self.UserView.Traffic)[srcIp][dstIp]
 			} else {
 				delta[srcIp][dstIp] += traffic
 			}
@@ -37,9 +37,9 @@ func (p *Processor) getTraffic(swId int, torId int) int {
 		}
 	}
 
-	self.Traffic = traffic
+	self.UserView.Traffic = &traffic
 
-	for _, app := range self.AppServer.View {
+	for _, app := range self.UserView.AppServer.Apps {
 		if app.Active {
 			logger.ProcessorLog.Debugf("App %s, Iter %d, Traffic Matrix %v", app.AppId, app.Iter, app.IterTrafficMatrix[app.Iter])
 			for srcIp, dstIps := range app.IterTrafficMatrix[app.Iter] {

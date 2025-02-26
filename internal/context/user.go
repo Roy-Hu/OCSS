@@ -5,9 +5,11 @@ import (
 )
 
 type UserView struct {
-	OCSs    map[string]*OCS
-	ToRs    map[string]*ToR
-	Servers map[string]*Server
+	OCSs      map[string]*OCS
+	ToRs      map[string]*ToR
+	Servers   map[string]*Server
+	AppServer *AppServer
+	Traffic   *TrafficMatrix
 }
 
 type State struct {
