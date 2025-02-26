@@ -2,7 +2,6 @@ package ocss
 
 import (
 	"context"
-	"time"
 
 	ocss_context "github.com/comp590/ocss/internal/context"
 
@@ -50,14 +49,25 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 	states["State1"] = &ocss_context.State{
 		Triggers: []func(ctx context.Context) bool{
 			func(ctx context.Context) bool {
-				ticker := time.NewTicker(30000 * time.Second)
-				defer ticker.Stop()
-
-				select {
-				case <-ticker.C:
-					return true
-				case <-ctx.Done():
-					return false
+				for {
+					select {
+					case <-ctx.Done():
+						return false
+					case app := <-user.AppServer.AppChan:
+						if app == "allreduce" {
+							for {
+								select {
+								case <-ctx.Done():
+									return false
+								case iter := <-user.AppServer.Apps[app].FinishedIter:
+									if iter == 1 {
+										logger.StateLog.Infof("State1: AllReduce finished")
+										return true
+									}
+								}
+							}
+						}
+					}
 				}
 			},
 		},
@@ -70,6 +80,30 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 
 		InitState: true,
 	}
+
+	// states["State1"] = &ocss_context.State{
+	// 	Triggers: []func(ctx context.Context) bool{
+	// 		func(ctx context.Context) bool {
+	// 			ticker := time.NewTicker(30000 * time.Second)
+	// 			defer ticker.Stop()
+
+	// 			select {
+	// 			case <-ticker.C:
+	// 				return true
+	// 			case <-ctx.Done():
+	// 				return false
+	// 			}
+	// 		},
+	// 	},
+	// 	Actions: []func() string{
+	// 		MyActions["AllReduce"],
+	// 		func() string {
+	// 			return "State1"
+	// 		},
+	// 	},
+
+	// 	InitState: true,
+	// }
 
 	return states
 }

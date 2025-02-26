@@ -98,6 +98,7 @@ func Init() error {
 			AppServer: &AppServer{
 				Apps:    make(map[string]*App),
 				Address: configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port),
+				AppChan: make(chan string),
 			},
 		},
 		IpToServer: make(map[string]string),

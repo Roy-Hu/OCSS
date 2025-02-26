@@ -10,12 +10,16 @@ import (
 type AppServer struct {
 	Address string
 	Apps    map[string]*App
+
+	AppChan chan string
 }
 type App struct {
 	AppId             string
 	IterTrafficMatrix map[int]TrafficMatrix
 	Active            bool
 	Iter              int
+
+	FinishedIter chan int
 }
 
 func (a *App) ConstructHeapMap() {

@@ -64,8 +64,11 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		app = &ocss_context.App{
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
 			AppId:             appId,
+			FinishedIter:      make(chan int),
 		}
 		self.UserView.AppServer.Apps[appId] = app
+		self.UserView.AppServer.AppChan <- appId
+
 	} else if app.Iter != iterNum-1 {
 		logger.HttpLog.Infof("Invalid iteration number: %v", iterNum)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
@@ -131,6 +134,8 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 	app.ConstructHeapMap()
 
 	app.Active = false
+
+	app.FinishedIter <- iterNum
 }
 
 // setupRoutes configures the HTTP routes using Gorilla Mux.
