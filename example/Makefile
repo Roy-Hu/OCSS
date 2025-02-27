@@ -11,6 +11,7 @@ all: compile mkdir send
 compile:
 	@echo "Compiling allreduce.c ..."
 	mpicc -o allreduce allreduce.c
+	mpicc -o allreduce2 allreduce2.c
 
 # 2. Create the directory on each remote node
 mkdir: $(PORTS:%=mkdir-%)
@@ -38,3 +39,15 @@ run:
 	       --hostfile hosts.txt \
 	       -np 6 \
 	       ./allreduce
+
+run2:
+	@echo "Running the MPI program with ring allreduce ..."
+	mpirun --allow-run-as-root \
+			--mca btl_tcp_if_include eth3 \
+			--mca btl_base_verbose 6 \
+			--mca coll_tuned_use_dynamic_rules 1 \
+			--mca coll_tuned_allreduce_algorithm 4 \
+			--rankfile rank2.txt \
+			--hostfile hosts2.txt \
+			-np 6 \
+			./allreduce2
