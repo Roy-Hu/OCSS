@@ -2,6 +2,7 @@ package context
 
 import (
 	"strconv"
+	"sync"
 
 	"github.com/comp590/ocss/internal/logger"
 	"github.com/comp590/ocss/internal/util"
@@ -13,7 +14,10 @@ type AppServer struct {
 
 	AppChan chan string
 }
+
 type App struct {
+	sync.RWMutex
+
 	AppId             string
 	IterTrafficMatrix map[int]TrafficMatrix
 	Active            bool

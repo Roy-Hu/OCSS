@@ -8,17 +8,15 @@ import (
 	"github.com/comp590/ocss/internal/logger"
 )
 
-func (p *Processor) getTraffic(swId int, torId int) int {
+func (p *Processor) getTraffic(swId int, torId int, tol ocss_context.TrafficMatrix) {
 	forwarder := p.Forwarder()
 	self := ocss_context.GetSelf()
 
 	traffic, err := forwarder.GetTrafficMatrix(swId, torId)
 	if err != nil {
 		logger.ProcessorLog.Errorf("Error getting traffic matrix: %v", err)
-		return 0
+		return
 	}
-
-	tol := 0
 
 	delta := make(map[string]map[string]int)
 	for srcIp, trafficMap := range traffic {
@@ -27,38 +25,22 @@ func (p *Processor) getTraffic(swId int, torId int) int {
 				delta[srcIp] = make(map[string]int)
 			}
 
-			if _, ok := (*self.UserView.Traffic)[srcIp][dstIp]; ok {
-				delta[srcIp][dstIp] += traffic - (*self.UserView.Traffic)[srcIp][dstIp]
+			if _, ok := self.UserView.Traffic[srcIp][dstIp]; ok {
+				delta[srcIp][dstIp] += traffic - self.UserView.Traffic[srcIp][dstIp]
 			} else {
 				delta[srcIp][dstIp] += traffic
 			}
 
-			tol += traffic
-		}
-	}
-
-	self.UserView.Traffic = &traffic
-
-	for _, app := range self.UserView.AppServer.Apps {
-		if app.Active {
-			logger.ProcessorLog.Debugf("App %s, Iter %d, Traffic Matrix %v", app.AppId, app.Iter, app.IterTrafficMatrix[app.Iter])
-			for srcIp, dstIps := range app.IterTrafficMatrix[app.Iter] {
-				if _, ok := delta[srcIp]; !ok {
-					continue
-				}
-				for dstIp := range dstIps {
-					if _, ok := delta[srcIp][dstIp]; ok {
-						logger.ProcessorLog.Debugf("srcIp %s, dstIp %s, delta %d", srcIp, dstIp, delta[srcIp][dstIp])
-						// TODO: This should only record traffic in this iter instead of accumulated traffic
-						app.IterTrafficMatrix[app.Iter][srcIp][dstIp] = traffic[srcIp][dstIp]
-					}
-				}
-
+			if _, ok := tol[srcIp]; !ok {
+				tol[srcIp] = make(map[string]int)
 			}
+
+			tol[srcIp][dstIp] += traffic
 		}
 	}
 
-	return tol
+	self.UserView.Traffic = traffic
+
 }
 
 func (p *Processor) createController() {
@@ -82,7 +64,9 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			// Collect traffic info for each ToR
-			torTraffic := make(map[string]int)
+			var tolTraffic ocss_context.TrafficMatrix
+			tolTraffic = make(ocss_context.TrafficMatrix)
+
 			for _, tor := range self.UserView.ToRs {
 				sw := tor.Device
 				dev, ok := self.Switches[sw]
@@ -93,12 +77,30 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 
 				swid := dev.Id
 				torid := tor.Id
-				torName := tor.Name
 
-				traffic := p.getTraffic(swid, torid)
-				torTraffic[torName] = traffic
+				p.getTraffic(swid, torid, tolTraffic)
+			}
 
-				logger.ProcessorLog.Debugf("Monitor Traffic: Switch %d, ToR %s, traffic %v", swid, torName, traffic)
+			for _, app := range self.UserView.AppServer.Apps {
+				if app.Active {
+					app.Lock()
+
+					logger.ProcessorLog.Debugf("App %s, Iter %d, Traffic Matrix %v", app.AppId, app.Iter, app.IterTrafficMatrix[app.Iter])
+					for srcIp, dstIps := range app.IterTrafficMatrix[app.Iter] {
+						if _, ok := tolTraffic[srcIp]; !ok {
+							continue
+						}
+						for dstIp := range dstIps {
+							if _, ok := tolTraffic[srcIp][dstIp]; ok {
+								logger.ProcessorLog.Debugf("srcIp %s, dstIp %s, tolTraffic %d", srcIp, dstIp, tolTraffic[srcIp][dstIp])
+								// TODO: This should only record traffic in this iter instead of accumulated traffic
+								app.IterTrafficMatrix[app.Iter][srcIp][dstIp] = tolTraffic[srcIp][dstIp]
+							}
+						}
+					}
+
+					app.Unlock()
+				}
 			}
 
 		case <-ctx.Done():
