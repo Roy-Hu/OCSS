@@ -159,7 +159,10 @@ class RDCController(ControllerBase):
         
         # Wait for the flow stats reply handler to update the matrix.
         # Timeout after, say, 1 second (adjust as needed).
-        self.rdc_app.flow_stats_event.wait(timeout=1.0)
+        if not self.rdc_app.flow_stats_event.wait(timeout=1.0):
+            # Timeout occurred; return error response.
+            body = json.dumps({'error': 'Timeout waiting for flow stats update'})
+            return Response(content_type='application/json', body=body, status=500)        
         
         # Acquire the lock so no other thread writes to traffic_matrix while we read
         with self.rdc_app.lock:

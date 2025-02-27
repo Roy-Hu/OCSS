@@ -268,6 +268,9 @@ class RDC(app_manager.RyuApp):
                     if key not in self.traffic_matrix[dpid][torid] or self.traffic_matrix[dpid][torid][key] < byte_count:
                         self.traffic_matrix[dpid][torid][key] = byte_count
                         
+                        if self.traffic_matrix[dpid][torid][key] < byte_count:
+                            logger.SwitchLog.error("Traffic Matrix: %d %d %s %s %d", dpid, torid, src_ip, dst_ip, byte_count)
+                        
         self.flow_stats_event.set()
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
