@@ -152,6 +152,15 @@ class RDCController(ControllerBase):
         torid_str = kwargs['torid']
         torid = int(torid_str)
 
+        # Clear the event before sending the request.
+        self.rdc_app.flow_stats_event.clear()
+    
+        self.rdc_app.request_flow_stats(dpid)
+        
+        # Wait for the flow stats reply handler to update the matrix.
+        # Timeout after, say, 1 second (adjust as needed).
+        self.rdc_app.flow_stats_event.wait(timeout=1.0)
+        
         # Acquire the lock so no other thread writes to traffic_matrix while we read
         with self.rdc_app.lock:
             if dpid not in self.rdc_app.traffic_matrix:

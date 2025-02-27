@@ -45,7 +45,8 @@ class RDC(app_manager.RyuApp):
         self.monitor_threads = {} # Key: dpid, Value: hub.spawn thread
         self.switchs = set()
         self.lock = hub.Semaphore()
-        
+        self.flow_stats_event = hub.Event()
+
         self.tracked_cookie = 0x1000 
         self.untracked_cookie = 0x2000  
         self.tor_tracked_cookies = set()  # Set of integers
@@ -229,16 +230,9 @@ class RDC(app_manager.RyuApp):
         self.traffic_matrix[dpid] = {}
         
         self.switchs.add(dpid)
-        if dpid not in self.monitor_threads:
-            self.monitor_threads[dpid] = hub.spawn(self._monitor, dp)
 
-    def _monitor(self, datapath):
-        logger.SwitchLog.info("Starting monitoring thread for dpid %d", datapath.id)
-        while True:
-            self.request_flow_stats(datapath)
-            hub.sleep(0.1) 
-
-    def request_flow_stats(self, datapath):
+    def request_flow_stats(self, dpid):
+        datapath = self.dataPaths[dpid]
         logger.SwitchLog.debug("Request flow stats for dpid %d", datapath.id)
         parser = datapath.ofproto_parser
 
@@ -273,6 +267,8 @@ class RDC(app_manager.RyuApp):
                 with self.lock:
                     if key not in self.traffic_matrix[dpid][torid] or self.traffic_matrix[dpid][torid][key] < byte_count:
                         self.traffic_matrix[dpid][torid][key] = byte_count
+                        
+        self.flow_stats_event.set()
 
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         logger.SwitchLog.info("Build Packets for Swiich %d", dpid)
