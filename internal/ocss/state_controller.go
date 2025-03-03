@@ -46,13 +46,15 @@ func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Co
 				return false
 			case <-user.AppServer.Apps[appId].AppChan:
 				if iter != 0 {
+					logger.StateLog.Debugf("State1: App %s started", appId)
+					user.AppServer.Apps[appId].MonitoredIter = true
 					for {
 						select {
 						case <-ctx.Done():
 							return false
 						case iter := <-user.AppServer.Apps[appId].FinishedIter:
 							if iter == 1 {
-								logger.StateLog.Infof("State1: AllReduce finished")
+								logger.StateLog.Debugf("State1: AllReduce finished")
 								return true
 							}
 						}
@@ -152,6 +154,10 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 					// ocss_context.PrintFowardingRule()
 
 					s.Processor().UpdateForwardingTables()
+
+					for _, server := range self.UserView.Servers {
+						logger.StateLog.Warnf("Server %v connected to %v", server.Name, server.ConnToR)
+					}
 
 					currentStateName = nextState
 				}

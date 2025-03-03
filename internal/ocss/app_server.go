@@ -61,22 +61,21 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 
 	app, exists := self.UserView.AppServer.Apps[appId]
 	if !exists {
+		logger.HttpLog.Debugf("Creating new app %v", appId)
 		app = &ocss_context.App{
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
 			AppId:             appId,
-			FinishedIter:      make(chan int),
-			AppChan:           make(chan bool),
+			MonitoredApp:      false,
 		}
 		self.UserView.AppServer.Apps[appId] = app
-
-		if self.UserView.AppServer.Apps[appId].MonitoredApp {
-			self.UserView.AppServer.Apps[appId].AppChan <- true
-		}
-
 	} else if app.Iter != iterNum-1 {
-		logger.HttpLog.Infof("Invalid iteration number: %v", iterNum)
+		logger.HttpLog.Errorf("Invalid iteration number: %v", iterNum)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
+	}
+
+	if self.UserView.AppServer.Apps[appId].MonitoredApp {
+		self.UserView.AppServer.Apps[appId].AppChan <- true
 	}
 
 	app.Iter = iterNum
@@ -138,6 +137,7 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 	app.ConstructHeapMap()
 
 	if app.MonitoredIter {
+		logger.HttpLog.Errorf("Sending finished iter %v for app %v", iterNum, appId)
 		app.FinishedIter <- iterNum
 	}
 
