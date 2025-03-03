@@ -58,6 +58,7 @@ type Server struct {
 	Name          string
 	Ip            string
 	PortConnToMap map[int]*ConnectedTo
+	ConnToR       string
 }
 
 type ConnectedTo struct {
@@ -93,8 +94,9 @@ func Init() error {
 		OCSs:       make(map[string]*OCS),
 		DeviceType: make(map[string]DeviceType),
 		UserView: &UserView{
-			OCSs: make(map[string]*OCS),
-			ToRs: make(map[string]*ToR),
+			OCSs:    make(map[string]*OCS),
+			ToRs:    make(map[string]*ToR),
+			Servers: make(map[string]*Server),
 			AppServer: &AppServer{
 				Apps:    make(map[string]*App),
 				Address: configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port),
@@ -117,6 +119,8 @@ func Init() error {
 		ocssContext.Servers[s.Name] = server
 
 		ocssContext.IpToServer[s.IP] = s.Name
+
+		ocssContext.UserView.Servers[s.Name] = server
 	}
 
 	// Initialize switches

@@ -44,7 +44,9 @@ func (p *Processor) Stop() {
 
 // ocs_in_port should setup server pointer before calling this function
 // setup the sever pointer for the switch port that connects to the ocs port
-func setOcsNxtSwitch(self *ocss_context.OCSSContext, ocs *ocss_context.OCS, ocs_in_port int) error {
+func setOcsNxtSwitch(ocs *ocss_context.OCS, ocs_in_port int) error {
+	self := ocss_context.GetSelf()
+
 	ocs_out_port := ocs.ConnectedPort(ocs_in_port)
 	if self.UserView.OCSs[ocs.Name].PortServerConn[ocs_out_port].FixedServer {
 		logger.ProcessorLog.Errorf("OCS [%s] Port [%d] and Port [%d] both connects to a fixed server, skip", ocs.Name, ocs_in_port, ocs_out_port)
@@ -64,6 +66,8 @@ func setOcsNxtSwitch(self *ocss_context.OCSSContext, ocs *ocss_context.OCS, ocs_
 
 		tor := self.UserView.FindToRByDeviceAndPort(device, port)
 		tor.PortServerConn[port].CopyConnServerInfo(ocs.PortServerConn[ocs_out_port])
+
+		setToRForSever(tor)
 	} else {
 		logger.ProcessorLog.Errorf("Currently OCS port %d should connect to a switch instead of %s", ocs_out_port, ocs.PortConnToMap[ocs_out_port].Device)
 		return fmt.Errorf("Currently OCS should connect to a switch")
@@ -72,6 +76,18 @@ func setOcsNxtSwitch(self *ocss_context.OCSSContext, ocs *ocss_context.OCS, ocs_
 	return nil
 }
 
+func setToRForSever(tor *ocss_context.ToR) {
+	self := ocss_context.GetSelf()
+
+	for _, connInfo := range tor.PortServerConn {
+		for server, ok := range connInfo.Server {
+			if ok {
+				self.UserView.Servers[server].ConnToR = tor.Name
+			}
+		}
+	}
+
+}
 func (p *Processor) CreateForwardingTables() error {
 	self := ocss_context.GetSelf()
 	ocs_finished_setup := make(map[string]bool)
@@ -124,7 +140,7 @@ func (p *Processor) CreateForwardingTables() error {
 							}
 							ocs.PortServerConn[ocs_port].Server[sw.PortConnToMap[in_port].Device] = true
 
-							if err := setOcsNxtSwitch(self, ocs, ocs_port); err != nil {
+							if err := setOcsNxtSwitch(ocs, ocs_port); err != nil {
 								// logger.ProcessorLog.Errorf("Error setting OCS [%s] Port [%d] -> [%s] Port [%d]: ", ocs.Name, ocs_port, connTo.Device, connTo.Port, err)
 								return err
 							}
@@ -177,7 +193,7 @@ func (p *Processor) UpdateForwardingTables() error {
 		connPorts := ocs.GetConnPorts()
 		for _, ocs_port := range connPorts {
 			if ocs.PortServerConn[ocs_port].FixedServer {
-				if err := setOcsNxtSwitch(self, ocs, ocs_port); err != nil {
+				if err := setOcsNxtSwitch(ocs, ocs_port); err != nil {
 					logger.ProcessorLog.Errorf("Error setting OCS [%s] Port [%d] <-> Port [%d]", ocs.Name, ocs_port, ocs.ConnectedPort(ocs_port))
 					return err
 				}
@@ -217,7 +233,7 @@ func updateCoreOCSAndTor(core_ocs map[string]bool) {
 							if ok {
 								if port1 != port2 {
 									sw.AddForwardingRule(tor.Id, port1, port2, self.Servers[server1].Ip, self.Servers[server2].Ip)
-									logger.ProcessorLog.Warnf("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[server1].Ip, tor.Name, port1, port2, self.Servers[server2].Ip)
+									logger.ProcessorLog.Debugf("Server [%s] -> %s[Port [%d] -> [%d]] -> Server [%s] ", self.Servers[server1].Ip, tor.Name, port1, port2, self.Servers[server2].Ip)
 								}
 							}
 						}
