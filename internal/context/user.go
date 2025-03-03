@@ -9,7 +9,7 @@ type UserView struct {
 	ToRs      map[string]*ToR
 	Servers   map[string]*Server
 	AppServer *AppServer
-	Traffic   TrafficMatrix
+	Traffic   map[string]TrafficMatrix
 }
 
 type State struct {

@@ -147,40 +147,41 @@ class RDCController(ControllerBase):
     @route('rdc', get_traffic_matrix_url, methods=['GET'],
         requirements={'dpid': dpid_lib.DPID_PATTERN, 'torid': '\d+'})
     def get_traffic_matrix(self, req, **kwargs):
-        dpid_str = kwargs['dpid']
-        dpid = int(dpid_str)
-        torid_str = kwargs['torid']
-        torid = int(torid_str)
+        # Parse dpid and torid from the URL parameters.
+        dpid = int(kwargs['dpid'])
+        torid = int(kwargs['torid'])
 
-        # Clear the event before sending the request.
+        # Clear the event and send the flow stats request.
         self.rdc_app.flow_stats_event.clear()
-    
         self.rdc_app.request_flow_stats(dpid)
         
         # Wait for the flow stats reply handler to update the matrix.
-        # Timeout after, say, 1 second (adjust as needed).
         if not self.rdc_app.flow_stats_event.wait(timeout=1.0):
-            # Timeout occurred; return error response.
+            # Timeout: no reply received within the expected period.
             body = json.dumps({'error': 'Timeout waiting for flow stats update'})
             return Response(content_type='application/json', body=body, status=500)        
-        
-        # Acquire the lock so no other thread writes to traffic_matrix while we read
+
+        # Acquire the lock to safely read the shared traffic matrix.
         with self.rdc_app.lock:
+            # Ensure that the matrix for this dpid exists.
             if dpid not in self.rdc_app.traffic_matrix:
                 self.rdc_app.traffic_matrix[dpid] = {}
+            # If no stats have been stored for this torid, create an empty dict.
             if torid not in self.rdc_app.traffic_matrix[dpid]:
                 self.rdc_app.traffic_matrix[dpid][torid] = {}
 
+            # Retrieve the stats dictionary for this dpid and torid.
             src_dict = self.rdc_app.traffic_matrix[dpid][torid]
 
-            # Build JSON structure
+            # Build a JSON-friendly structure:
+            # (src_ip -> {dst_ip: byte_count})
             traffic_matrix_dict = {}
             for (src_ip, dst_ip), byte_count in src_dict.items():
                 if src_ip not in traffic_matrix_dict:
                     traffic_matrix_dict[src_ip] = {}
                 traffic_matrix_dict[src_ip][dst_ip] = byte_count
 
-        # Convert to JSON outside the lock (this is just a string operation)
+        # Convert the data structure to JSON and return it.
         body = json.dumps(traffic_matrix_dict)
         return Response(content_type='application/json', body=body)
 

@@ -27,6 +27,44 @@ func NewStateController(ocss StateControllerOCSS) (*StateController, error) {
 	return s, nil
 }
 
+func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Context) bool {
+	user := ocss_context.GetSelf().UserView
+	if _, ok := user.AppServer.Apps[appId]; !ok {
+		user.AppServer.Apps[appId] = &ocss_context.App{
+			AppId:             appId,
+			FinishedIter:      make(chan int),
+			AppChan:           make(chan bool),
+			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
+			MonitoredApp:      true,
+		}
+	}
+
+	return func(ctx context.Context) bool {
+		for {
+			select {
+			case <-ctx.Done():
+				return false
+			case <-user.AppServer.Apps[appId].AppChan:
+				if iter != 0 {
+					for {
+						select {
+						case <-ctx.Done():
+							return false
+						case iter := <-user.AppServer.Apps[appId].FinishedIter:
+							if iter == 1 {
+								logger.StateLog.Infof("State1: AllReduce finished")
+								return true
+							}
+						}
+					}
+				} else {
+					return true
+				}
+			}
+		}
+	}
+}
+
 func (s *StateController) runState(parentCtx context.Context, stateName string, state *ocss_context.State) string {
 	// Create a cancelable context derived from the parent context
 	ctx, cancel := context.WithCancel(parentCtx)

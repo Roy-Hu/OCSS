@@ -11,8 +11,6 @@ import (
 type AppServer struct {
 	Address string
 	Apps    map[string]*App
-
-	AppChan chan string
 }
 
 type App struct {
@@ -23,7 +21,11 @@ type App struct {
 	Active            bool
 	Iter              int
 
+	MonitoredApp  bool
+	MonitoredIter bool
+
 	FinishedIter chan int
+	AppChan      chan bool
 }
 
 func (a *App) ConstructHeapMap() {

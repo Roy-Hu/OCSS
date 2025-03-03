@@ -65,9 +65,13 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
 			AppId:             appId,
 			FinishedIter:      make(chan int),
+			AppChan:           make(chan bool),
 		}
 		self.UserView.AppServer.Apps[appId] = app
-		self.UserView.AppServer.AppChan <- appId
+
+		if self.UserView.AppServer.Apps[appId].MonitoredApp {
+			self.UserView.AppServer.Apps[appId].AppChan <- true
+		}
 
 	} else if app.Iter != iterNum-1 {
 		logger.HttpLog.Infof("Invalid iteration number: %v", iterNum)
@@ -89,7 +93,7 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Traffic matrix received successfully"))
+	w.Write([]byte("Start iter received successfully"))
 }
 
 // HandlePostTrafficMatrix handles POST requests to receive traffic matrix data.
@@ -105,26 +109,26 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 
 	iterNum, err := strconv.Atoi(iter)
 	if err != nil {
-		logger.HttpLog.Infof("Error converting iteration number to integer: %v", err)
+		logger.HttpLog.Errorf("Error converting iteration number to integer: %v", err)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
 	}
 
 	app, exists := self.UserView.AppServer.Apps[appId]
 	if !exists {
-		logger.HttpLog.Infof("App %v does not exist", appId)
+		logger.HttpLog.Errorf("App %v does not exist", appId)
 		http.Error(w, "App does not exist", http.StatusBadRequest)
 		return
 	}
 
 	if !app.Active {
-		logger.HttpLog.Infof("App is not active")
+		logger.HttpLog.Errorf("App is not active")
 		http.Error(w, "App is not active", http.StatusBadRequest)
 		return
 	}
 
 	if app.Iter != iterNum {
-		logger.HttpLog.Infof("Invalid iteration number: %v", iterNum)
+		logger.HttpLog.Errorf("Invalid iteration number: %v", iterNum)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
 	}
@@ -133,9 +137,15 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 	logger.HttpLog.Errorf("App %s, Iter %d, Traffic Matrix %v", appId, iterNum, app.IterTrafficMatrix[iterNum])
 	app.ConstructHeapMap()
 
+	if app.MonitoredIter {
+		app.FinishedIter <- iterNum
+	}
+
 	app.Active = false
 
-	app.FinishedIter <- iterNum
+	logger.HttpLog.Infof("Finished iteration %v for app %v", iterNum, appId)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("End iter received successfully"))
 }
 
 // setupRoutes configures the HTTP routes using Gorilla Mux.
