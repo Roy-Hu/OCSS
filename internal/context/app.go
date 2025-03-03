@@ -21,11 +21,11 @@ type App struct {
 	Active            bool
 	Iter              int
 
-	MonitoredApp  bool
-	MonitoredIter bool
+	MonitoredApp  []bool
+	MonitoredIter []bool
 
-	FinishedIter chan int
-	AppChan      chan bool
+	FinishedIter []chan int
+	AppChan      []chan bool
 }
 
 func (a *App) ConstructHeapMap() {

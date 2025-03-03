@@ -65,7 +65,6 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		app = &ocss_context.App{
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
 			AppId:             appId,
-			MonitoredApp:      false,
 		}
 		self.UserView.AppServer.Apps[appId] = app
 	} else if app.Iter != iterNum-1 {
@@ -74,8 +73,10 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if self.UserView.AppServer.Apps[appId].MonitoredApp {
-		self.UserView.AppServer.Apps[appId].AppChan <- true
+	for i, monitor := range app.MonitoredApp {
+		if monitor {
+			self.UserView.AppServer.Apps[appId].AppChan[i] <- true
+		}
 	}
 
 	app.Iter = iterNum
@@ -136,9 +137,10 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 	logger.HttpLog.Errorf("App %s, Iter %d, Traffic Matrix %v", appId, iterNum, app.IterTrafficMatrix[iterNum])
 	app.ConstructHeapMap()
 
-	if app.MonitoredIter {
-		logger.HttpLog.Errorf("Sending finished iter %v for app %v", iterNum, appId)
-		app.FinishedIter <- iterNum
+	for i, monitor := range app.MonitoredIter {
+		if monitor {
+			self.UserView.AppServer.Apps[appId].FinishedIter[i] <- iterNum
+		}
 	}
 
 	app.Active = false

@@ -32,29 +32,42 @@ func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Co
 	if _, ok := user.AppServer.Apps[appId]; !ok {
 		user.AppServer.Apps[appId] = &ocss_context.App{
 			AppId:             appId,
-			FinishedIter:      make(chan int),
-			AppChan:           make(chan bool),
+			FinishedIter:      []chan int{},
+			AppChan:           []chan bool{},
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
-			MonitoredApp:      true,
+			MonitoredApp:      []bool{},
+			MonitoredIter:     []bool{},
 		}
 	}
+
+	i := len(user.AppServer.Apps[appId].AppChan)
+	user.AppServer.Apps[appId].MonitoredApp = append(user.AppServer.Apps[appId].MonitoredApp, true)
+	user.AppServer.Apps[appId].AppChan = append(user.AppServer.Apps[appId].AppChan, make(chan bool))
 
 	return func(ctx context.Context) bool {
 		for {
 			select {
 			case <-ctx.Done():
 				return false
-			case <-user.AppServer.Apps[appId].AppChan:
+			case <-user.AppServer.Apps[appId].AppChan[i]:
+				user.AppServer.Apps[appId].MonitoredApp[i] = false
+
+				logger.StateLog.Debugf("State1: App %s started", appId)
 				if iter != 0 {
 					logger.StateLog.Debugf("State1: App %s started", appId)
-					user.AppServer.Apps[appId].MonitoredIter = true
+
+					j := len(user.AppServer.Apps[appId].FinishedIter)
+					user.AppServer.Apps[appId].MonitoredIter = append(user.AppServer.Apps[appId].MonitoredIter, true)
+					user.AppServer.Apps[appId].FinishedIter = append(user.AppServer.Apps[appId].FinishedIter, make(chan int))
+
 					for {
 						select {
 						case <-ctx.Done():
 							return false
-						case iter := <-user.AppServer.Apps[appId].FinishedIter:
-							if iter == 1 {
-								logger.StateLog.Debugf("State1: AllReduce finished")
+						case iter := <-user.AppServer.Apps[appId].FinishedIter[j]:
+							if iter > 0 {
+								logger.StateLog.Infof("App %s finished iter %d", appId, iter)
+								user.AppServer.Apps[appId].MonitoredIter[j] = false
 								return true
 							}
 						}
