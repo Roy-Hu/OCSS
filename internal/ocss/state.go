@@ -2,6 +2,8 @@ package ocss
 
 import (
 	"context"
+	"os"
+	"sort"
 
 	ocss_context "github.com/comp590/ocss/internal/context"
 
@@ -35,12 +37,117 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 	}
 
 	MyActions["AllReduce"] = func() string {
+
+		newInPort := []int{}
+		newOutPort := []int{}
+
+		ringLen := len(user.Servers)
+
+		torPortCnt := make(map[string][]int)
+		for _, server := range user.Servers {
+			// TODO: currently assume server used only one port
+
+			for _, connTo := range server.PortConnToMap {
+				// torName := connTo.Device
+				logger.ActionLog.Warnf("Server: %v, connTo: %v", server.Name, connTo)
+				torName := server.ConnToR
+				if _, ok := torPortCnt[torName]; !ok {
+					for _, connTo := range user.ToRs[torName].PortConnToMap {
+						if connTo.Name == "ocs_edge" {
+							torPortCnt[torName] = append(torPortCnt[torName], connTo.Port)
+						}
+
+					}
+				}
+				break
+			}
+		}
+
+		// Extract keys from the map.
+		tors := make([]string, 0, len(torPortCnt))
+		for tor := range torPortCnt {
+			tors = append(tors, tor)
+		}
+
+		// Sort keys based on the count value.
+		// For ascending order (lowest to highest), use "<".
+		// For descending order (highest to lowest), use ">".
+		sort.Slice(tors, func(i, j int) bool {
+			return len(torPortCnt[tors[i]]) > len(torPortCnt[tors[j]])
+		})
+
+		for tor, ports := range torPortCnt {
+			logger.ActionLog.Warnf("Tor: %v, Ports: %v", tor, ports)
+		}
+
+		linkTraffics := user.GetTopKLinkTraffic("allreduce", 1, ringLen)
+
+		cur := linkTraffics[0]
+		ring := []ocss_context.TrafficPair{}
+
+		for i := 0; i < ringLen; i++ {
+			findNext := false
+			for _, link := range linkTraffics {
+				if cur.Dst == link.Src {
+					cur = link
+					findNext = true
+
+					break
+				}
+			}
+
+			if !findNext {
+				logger.ActionLog.Errorf("Cannot form a ring")
+				return "State1"
+			}
+
+			ring = append(ring, cur)
+			logger.ActionLog.Warnf("Server: %v", cur.Src)
+		}
+
+		// assume the ring starts at Link[i].src
+		for i := 0; i < ringLen; {
+			// always allocate server to the tor with the largest number of ports
+
+			for torName, ports := range torPortCnt {
+				logger.ActionLog.Warnf("Tor: %v, Ports: %v", torName, ports)
+				for _, port := range ports {
+					logger.ActionLog.Warnf("PortConnToMap: %v", user.ToRs[torName].PortConnToMap)
+					for _, connTo := range user.ToRs[torName].PortConnToMap {
+						logger.ActionLog.Warnf("ConnTo: %v", connTo)
+					}
+
+					ocsOutPort := port
+
+					server := user.Servers[ring[i].Src]
+
+					// TODO: currently assume server used only one port
+					for _, connTo := range server.PortConnToMap {
+						ocsInPort := connTo.Port
+
+						newInPort = append(newInPort, ocsInPort)
+						newOutPort = append(newOutPort, ocsOutPort)
+
+						break
+					}
+					i++
+
+					if i == ringLen {
+						break
+					}
+				}
+			}
+
+		}
 		newConn := &ocss_context.Connection{
-			In_port:  user.OCSs["ocs_edge"].Conn.In_port,
-			Out_port: []int{65, 71, 67, 69, 66, 72},
+			In_port:  newInPort,
+			Out_port: newOutPort,
 		}
 
 		logger.ActionLog.Infof("State1: %v", newConn)
+
+		os.Exit(0)
+
 		user.OCSs["ocs_edge"].UpdateConn(newConn)
 
 		return "State1"

@@ -168,8 +168,13 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 					s.Processor().UpdateForwardingTables()
 
+					// TODO
 					for _, server := range self.UserView.Servers {
 						logger.StateLog.Warnf("Server %v connected to %v", server.Name, server.ConnToR)
+						// for _, connTo := range server.PortConnToMap {
+						// 	logger.StateLog.Warnf("Server %v connected to %v", server.Name, connTo)
+						// 	break
+						// }
 					}
 
 					currentStateName = nextState

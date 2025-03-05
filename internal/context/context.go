@@ -120,6 +120,12 @@ func Init() error {
 
 		ocssContext.IpToServer[s.IP] = s.Name
 
+		// server = &Server{
+		// 	Name:          s.Name,
+		// 	Ip:            s.IP,
+		// 	PortConnToMap: make(map[int]*ConnectedTo),
+		// }
+
 		ocssContext.UserView.Servers[s.Name] = server
 	}
 

@@ -86,6 +86,20 @@ func setToRForSever(tor *ocss_context.ToR) {
 			}
 		}
 	}
+	// for torPort, connInfo := range tor.PortServerConn {
+	// 	for server, ok := range connInfo.Server {
+	// 		if ok {
+	// 			// TODO: currently assume server used only one port
+	// 			for _, connTo := range self.UserView.Servers[server].PortConnToMap {
+	// 				connTo.Device = tor.Device
+	// 				connTo.Port = torPort
+	// 				connTo.Name = tor.Name
+
+	// 				break
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 }
 func (p *Processor) CreateForwardingTables() error {
