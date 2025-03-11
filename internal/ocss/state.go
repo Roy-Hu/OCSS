@@ -2,7 +2,6 @@ package ocss
 
 import (
 	"context"
-	"os"
 	"sort"
 
 	ocss_context "github.com/comp590/ocss/internal/context"
@@ -69,9 +68,6 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 			tors = append(tors, tor)
 		}
 
-		// Sort keys based on the count value.
-		// For ascending order (lowest to highest), use "<".
-		// For descending order (highest to lowest), use ">".
 		sort.Slice(tors, func(i, j int) bool {
 			return len(torPortCnt[tors[i]]) > len(torPortCnt[tors[j]])
 		})
@@ -112,7 +108,6 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 			for torName, ports := range torPortCnt {
 				logger.ActionLog.Warnf("Tor: %v, Ports: %v", torName, ports)
 				for _, port := range ports {
-					logger.ActionLog.Warnf("PortConnToMap: %v", user.ToRs[torName].PortConnToMap)
 					for _, connTo := range user.ToRs[torName].PortConnToMap {
 						logger.ActionLog.Warnf("ConnTo: %v", connTo)
 					}
@@ -125,6 +120,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 					for _, connTo := range server.PortConnToMap {
 						ocsInPort := connTo.Port
 
+						logger.ActionLog.Errorf("Server: %v, connTo %v", server.Ip, connTo)
 						newInPort = append(newInPort, ocsInPort)
 						newOutPort = append(newOutPort, ocsOutPort)
 
@@ -145,8 +141,6 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 		}
 
 		logger.ActionLog.Infof("State1: %v", newConn)
-
-		os.Exit(0)
 
 		user.OCSs["ocs_edge"].UpdateConn(newConn)
 

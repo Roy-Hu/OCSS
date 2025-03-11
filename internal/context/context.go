@@ -120,11 +120,12 @@ func Init() error {
 
 		ocssContext.IpToServer[s.IP] = s.Name
 
-		// server = &Server{
-		// 	Name:          s.Name,
-		// 	Ip:            s.IP,
-		// 	PortConnToMap: make(map[int]*ConnectedTo),
-		// }
+		server = &Server{
+			Name:          s.Name,
+			Ip:            s.IP,
+			PortConnToMap: make(map[int]*ConnectedTo),
+		}
+		server.PortConnToMap[s.Port] = &ConnectedTo{}
 
 		ocssContext.UserView.Servers[s.Name] = server
 	}
@@ -349,16 +350,27 @@ func Init() error {
 	}
 
 	for _, l := range configuration.User.Link {
+		logger.CtxLog.Errorf("Link %s -> %s", l.Source, l.Destination)
 		s_ports, d_ports, err := getSrcDstPortsFromConfig(l.SourcePorts, l.DestinationPorts)
 		if err != nil {
 			return fmt.Errorf("Error parsing ports for link %s -> %s: %s", l.SourcePorts, l.DestinationPorts, err)
 		}
 
+		// currently only handle ocs to server or server to ocs link
 		if ocs, ok := ocssContext.UserView.OCSs[l.Source]; ok {
 			for i := range s_ports {
 				ocs.PortConnToMap[s_ports[i]] = &ConnectedTo{
 					Device: l.Destination,
 					Port:   d_ports[i],
+				}
+			}
+
+			if _, ok := ocssContext.UserView.Servers[l.Destination]; ok {
+				for i := range d_ports {
+					ocssContext.UserView.Servers[l.Destination].PortConnToMap[d_ports[i]] = &ConnectedTo{
+						Name: l.Source,
+						Port: s_ports[i],
+					}
 				}
 			}
 
@@ -372,6 +384,16 @@ func Init() error {
 					Port:   s_ports[i],
 				}
 			}
+
+			if _, ok := ocssContext.UserView.Servers[l.Source]; ok {
+				for i := range s_ports {
+					ocssContext.UserView.Servers[l.Source].PortConnToMap[s_ports[i]] = &ConnectedTo{
+						Name: l.Destination,
+						Port: d_ports[i],
+					}
+				}
+			}
+
 			continue
 		}
 
