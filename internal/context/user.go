@@ -44,7 +44,8 @@ func (u *UserView) GetTopKLinkTraffic(app string, iter int, k int) []TrafficPair
 	var pq PriorityQueue
 	heap.Init(&pq)
 
-	for srcIp, TrafficMatrix := range u.AppServer.Apps[app].IterTrafficMatrix[iter] {
+	iterTraffic := u.AppServer.Apps[app].IterTrafficMatrix[iter].GetIterTrafficMatrix()
+	for srcIp, TrafficMatrix := range iterTraffic {
 		for dstIp, traffic := range TrafficMatrix {
 			src := u.GetServerByIp(srcIp)
 			dst := u.GetServerByIp(dstIp)

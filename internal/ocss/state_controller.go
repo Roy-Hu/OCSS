@@ -33,7 +33,7 @@ func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Co
 		user.AppServer.Apps[appId] = &ocss_context.App{
 			AppId:             appId,
 			FinishedIter:      []chan int{},
-			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
+			IterTrafficMatrix: make(map[int]*ocss_context.IterTraffic),
 			MonitoredIter:     []bool{},
 		}
 	}

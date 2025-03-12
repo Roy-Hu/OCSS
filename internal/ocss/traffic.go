@@ -32,27 +32,9 @@ func (p *Processor) getTraffic(tor *ocss_context.ToR) ocss_context.TrafficMatrix
 		self.UserView.Traffic[torName] = make(map[string]map[string]int)
 	}
 
-	delta := make(ocss_context.TrafficMatrix)
-	for srcIp, trafficMap := range traffic {
-		if _, ok := delta[srcIp]; !ok {
-			delta[srcIp] = make(map[string]int)
-		}
+	self.UserView.Traffic[torName] = traffic
 
-		if _, ok := self.UserView.Traffic[torName][srcIp]; !ok {
-			self.UserView.Traffic[torName][srcIp] = make(map[string]int)
-		}
-
-		for dstIp, curTraffic := range trafficMap {
-			if curTraffic < self.UserView.Traffic[torName][srcIp][dstIp] {
-				logger.ProcessorLog.Errorf("Traffic matrix is not increasing, srcIp: %s, dstIp: %s, curTraffic: %d, prevTraffic: %d", srcIp, dstIp, curTraffic, self.UserView.Traffic[torName][srcIp][dstIp])
-			} else {
-				delta[srcIp][dstIp] = curTraffic - self.UserView.Traffic[torName][srcIp][dstIp]
-				self.UserView.Traffic[torName][srcIp][dstIp] = curTraffic
-			}
-		}
-	}
-
-	return delta
+	return self.UserView.Traffic[torName]
 }
 
 func (p *Processor) createController() {
@@ -75,13 +57,13 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			var deltas []ocss_context.TrafficMatrix
+			var traffics []ocss_context.TrafficMatrix
 
 			// Collect traffic info for each ToR
 			for _, tor := range self.UserView.ToRs {
-				delta := p.getTraffic(tor)
-				if delta != nil {
-					deltas = append(deltas, delta)
+				traffic := p.getTraffic(tor)
+				if traffic != nil {
+					traffics = append(traffics, traffic)
 				}
 			}
 
@@ -90,24 +72,27 @@ func (p *Processor) MonitorTraffic(ctx context.Context) {
 				if app.Active {
 					app.Lock()
 
-					for srcIp, dstIps := range app.IterTrafficMatrix[app.Iter] {
+					for srcIp, dstIps := range app.IterTrafficMatrix[app.Iter].Start {
 						for dstIp, _ := range dstIps {
-							delta := 0
+							traffic := 0
 
-							for _, d := range deltas {
-								if _, ok := d[srcIp]; ok {
-									if diff, ok := d[srcIp][dstIp]; ok && diff > 0 {
-										if delta == 0 {
-											delta = d[srcIp][dstIp]
+							for _, t := range traffics {
+								if _, ok := t[srcIp]; ok {
+									if diff, ok := t[srcIp][dstIp]; ok && diff > 0 {
+										if traffic == 0 {
+											traffic = t[srcIp][dstIp]
 										} else {
-											delta = min(delta, d[srcIp][dstIp])
+											traffic = min(traffic, t[srcIp][dstIp])
 										}
 									}
 								}
 							}
-
-							app.IterTrafficMatrix[app.Iter][srcIp][dstIp] += delta
-
+							if app.IterTrafficMatrix[app.Iter].Init {
+								app.IterTrafficMatrix[app.Iter].Start[srcIp][dstIp] = traffic
+								app.IterTrafficMatrix[app.Iter].Init = false
+							} else {
+								app.IterTrafficMatrix[app.Iter].End[srcIp][dstIp] = traffic
+							}
 						}
 					}
 

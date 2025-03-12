@@ -70,7 +70,7 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		app = &ocss_context.App{
 			AppId:             appId,
 			FinishedIter:      []chan int{},
-			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
+			IterTrafficMatrix: make(map[int]*ocss_context.IterTraffic),
 			MonitoredIter:     []bool{},
 		}
 		self.UserView.AppServer.Apps[appId] = app
@@ -81,15 +81,22 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 	}
 
 	app.Iter = iterNum
-	app.IterTrafficMatrix[iterNum] = make(ocss_context.TrafficMatrix)
+	app.IterTrafficMatrix[iterNum] = &ocss_context.IterTraffic{
+		Start: make(ocss_context.TrafficMatrix),
+		End:   make(ocss_context.TrafficMatrix),
+		Init:  true,
+	}
+
 	app.Active = true
 
 	for _, srcIp := range payload {
 		for _, dstIp := range payload {
-			if _, exists := app.IterTrafficMatrix[iterNum][srcIp]; !exists {
-				app.IterTrafficMatrix[iterNum][srcIp] = make(map[string]int)
+			if _, exists := app.IterTrafficMatrix[iterNum].Start[srcIp]; !exists {
+				app.IterTrafficMatrix[iterNum].Start[srcIp] = make(map[string]int)
+				app.IterTrafficMatrix[iterNum].End[srcIp] = make(map[string]int)
 			}
-			app.IterTrafficMatrix[iterNum][srcIp][dstIp] = 0
+			app.IterTrafficMatrix[iterNum].Start[srcIp][dstIp] = 0
+			app.IterTrafficMatrix[iterNum].End[srcIp][dstIp] = 0
 		}
 	}
 

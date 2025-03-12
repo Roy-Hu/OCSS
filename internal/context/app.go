@@ -8,6 +8,29 @@ import (
 	"github.com/comp590/ocss/internal/util"
 )
 
+type IterTraffic struct {
+	Start TrafficMatrix
+	End   TrafficMatrix
+
+	Init bool
+}
+
+func (it IterTraffic) GetIterTrafficMatrix() TrafficMatrix {
+	rtn := make(TrafficMatrix)
+
+	for srcIp, dstIps := range it.Start {
+		for dstIp, vol := range dstIps {
+			if _, ok := rtn[srcIp]; !ok {
+				rtn[srcIp] = make(map[string]int)
+			}
+
+			rtn[srcIp][dstIp] = it.End[srcIp][dstIp] - vol
+		}
+	}
+
+	return rtn
+}
+
 type AppServer struct {
 	Address string
 	Apps    map[string]*App
@@ -17,7 +40,7 @@ type App struct {
 	sync.RWMutex
 
 	AppId             string
-	IterTrafficMatrix map[int]TrafficMatrix
+	IterTrafficMatrix map[int]*IterTraffic
 	Active            bool
 	Iter              int
 
@@ -27,7 +50,9 @@ type App struct {
 
 func (a *App) ConstructHeapMap() {
 	traffic := make(map[string]map[string]int)
-	for srcIp, dstIps := range a.IterTrafficMatrix[a.Iter] {
+
+	iterTraffic := a.IterTrafficMatrix[a.Iter].GetIterTrafficMatrix()
+	for srcIp, dstIps := range iterTraffic {
 		for dstIp, vol := range dstIps {
 			src_server := ocssContext.IpToServer[srcIp]
 			dst_server := ocssContext.IpToServer[dstIp]
