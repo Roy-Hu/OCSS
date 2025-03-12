@@ -31,7 +31,7 @@ func (s *Switch) AddForwardingRule(torId int, inPort int, outPort int, srcIp str
 			s.ForwardingRule[torId][rule_name].Status = UPDATE
 		}
 	} else {
-		logger.SwitchLog.Infof("Add New Forwarding Rule: %s", rule_name)
+		logger.SwitchLog.Debugf("Add New Forwarding Rule: %s", rule_name)
 		s.ForwardingRule[torId][rule_name] = &Forward{
 			Device:   s.Device,
 			SrcPort:  inPort,

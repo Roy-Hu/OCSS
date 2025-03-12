@@ -45,7 +45,7 @@ func CreateHeatmap(traffic map[string]map[string]int, filename string) error {
 	heat := plotter.NewHeatMap(mg, cp)
 	// Explicitly set the min and max values.
 	heat.Min = 0
-	heat.Max = 200000000
+	heat.Max = 400000000
 
 	p.Add(heat)
 
@@ -54,7 +54,7 @@ func CreateHeatmap(traffic map[string]map[string]int, filename string) error {
 	p.NominalY(servers...)
 
 	// 6) Save the plot to a file (PNG, PDF, etc.).
-	return p.Save(6*vg.Inch, 6*vg.Inch, filename+".png")
+	return p.Save(6*vg.Inch, 6*vg.Inch, "log/"+filename+".png")
 }
 
 // customPalette implements the plot.Palette interface.

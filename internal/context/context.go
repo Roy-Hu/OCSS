@@ -30,14 +30,24 @@ const (
 )
 
 type OCSSContext struct {
-	Switches   map[string]*Switch
-	Servers    map[string]*Server
-	OCSs       map[string]*OCS
-	DeviceType map[string]DeviceType
-	UserView   *UserView
-	States     map[string]*State
-	IpToServer map[string]string
-	StateChan  chan string
+	Switches         map[string]*Switch
+	Servers          map[string]*Server
+	OCSs             map[string]*OCS
+	DeviceType       map[string]DeviceType
+	UserView         *UserView
+	IpToServer       map[string]string
+	AppStateInfoChan chan *StateInfo
+
+	// AppStateMachines contain the prototype of state machines
+	AppStateMachines map[string]StateMachine
+
+	// RunningAppStateMachines contain the running state machines
+	// each of the state machines is a copy of the prototype
+	// with the servers that are currently in the state
+
+	// So for the same App, there can be multiple state machines
+	// each of them is for a different set of servers
+	RunningAppStateMachines map[string][]*StateMachine
 }
 
 type ConnServerInfo struct {
@@ -104,8 +114,10 @@ func Init() error {
 			},
 			Traffic: make(map[string]TrafficMatrix),
 		},
-		IpToServer: make(map[string]string),
-		StateChan:  make(chan string),
+		IpToServer:              make(map[string]string),
+		AppStateInfoChan:        make(chan *StateInfo),
+		AppStateMachines:        make(map[string]StateMachine),
+		RunningAppStateMachines: make(map[string][]*StateMachine),
 	}
 
 	// Initialize servers
@@ -352,7 +364,7 @@ func Init() error {
 	}
 
 	for _, l := range configuration.User.Link {
-		logger.CtxLog.Errorf("Link %s -> %s", l.Source, l.Destination)
+		logger.CtxLog.Infof("Link %s -> %s", l.Source, l.Destination)
 		s_ports, d_ports, err := getSrcDstPortsFromConfig(l.SourcePorts, l.DestinationPorts)
 		if err != nil {
 			return fmt.Errorf("Error parsing ports for link %s -> %s: %s", l.SourcePorts, l.DestinationPorts, err)

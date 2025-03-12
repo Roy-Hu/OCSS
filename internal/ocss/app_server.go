@@ -43,7 +43,7 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, ok := self.States[appId]; !ok {
+	if _, ok := self.AppStateMachines[appId]; !ok {
 		logger.HttpLog.Warnf("App %s does not exist in states", appId)
 		http.Error(w, "App does not exist", http.StatusBadRequest)
 		return
@@ -101,7 +101,25 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 	}
 
 	if !exists {
-		self.StateChan <- appId
+		servers := make([]string, len(payload))
+
+		for i, ips := range payload {
+			server := self.UserView.GetServerByIp(ips)
+			if server == "" {
+				logger.HttpLog.Errorf("Server not found for IP %s", ips)
+				http.Error(w, "Server not found", http.StatusBadRequest)
+				return
+			}
+
+			servers[i] = server
+		}
+
+		stateInfo := &ocss_context.StateInfo{
+			Name:    appId,
+			Servers: servers,
+		}
+
+		self.AppStateInfoChan <- stateInfo
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -145,8 +163,6 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.HttpLog.Infof("Ending iteration %v for app %v", iterNum, appId)
-	logger.HttpLog.Errorf("App %s, Iter %d, Traffic Matrix %v", appId, iterNum, app.IterTrafficMatrix[iterNum])
 	app.ConstructHeapMap()
 
 	for i, monitor := range app.MonitoredIter {

@@ -65,7 +65,7 @@ func (a *App) ConstructHeapMap() {
 		}
 	}
 
-	logger.HttpLog.Infof("Creating heatmap for app %s, iter %d, traffic %v", a.AppId, a.Iter, traffic)
+	logger.HttpLog.Debugf("Creating heatmap for app %s, iter %d, traffic %v", a.AppId, a.Iter, traffic)
 	util.CreateHeatmap(traffic, a.AppId+"_"+strconv.Itoa(a.Iter))
 }
 

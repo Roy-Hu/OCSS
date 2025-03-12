@@ -3,5 +3,5 @@ bin
 ryu_backend/log
 *pyc
 example/allreduce
-*png
+log/*
 allreduce

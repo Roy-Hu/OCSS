@@ -9,46 +9,36 @@ import (
 	"github.com/comp590/ocss/internal/logger"
 )
 
-func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*ocss_context.State {
+func (s *StateController) setupStates(user *ocss_context.UserView) map[string]ocss_context.StateMachine {
 
-	states := make(map[string]*ocss_context.State)
-	MyActions := make(map[string]func() string)
-	MyTriggers := make(map[string]func(ctx context.Context) bool)
+	// These Initialization is needed for the code to run
+	// Init start
+	stateMachine := make(map[string]ocss_context.StateMachine)
 
-	MyTriggers["allreduce"] = func(ctx context.Context) bool {
+	MyActions := make(map[string]func(Servers map[string]bool) string)
+	MyTriggers := make(map[string]func(ctx context.Context, servers map[string]bool) bool)
+	// Init end
+
+	MyTriggers["initAllReduce"] = func(ctx context.Context, servers map[string]bool) bool {
 		return s.MonitorApp("allreduce", 1)(ctx)
 	}
 
-	// Right shift
-	MyActions["2ToR"] = func() string {
-		newConn := &ocss_context.Connection{
-			In_port:  user.OCSs["ocs_edge"].Conn.In_port,
-			Out_port: user.OCSs["ocs_edge"].Conn.Out_port,
-		}
-
-		first_out_port := user.OCSs["ocs_edge"].Conn.Out_port[0]
-
-		for i := 0; i < len(user.OCSs["ocs_edge"].Conn.Out_port)-1; i++ {
-			newConn.Out_port[i] = user.OCSs["ocs_edge"].Conn.Out_port[i+1]
-		}
-
-		newConn.Out_port[len(user.OCSs["ocs_edge"].Conn.Out_port)-1] = first_out_port
-
-		logger.ActionLog.Infof("State1: %v", newConn)
-		user.OCSs["ocs_edge"].UpdateConn(newConn)
-
-		return "State1"
-	}
-
-	MyActions["allreduce"] = func() string {
+	MyActions["initAllReduce"] = func(Servers map[string]bool) string {
 
 		newInPort := []int{}
 		newOutPort := []int{}
 
-		ringLen := len(user.Servers)
+		servers := make(map[string]*ocss_context.Server)
+
+		for server, ok := range Servers {
+			if ok {
+				servers[server] = user.Servers[server]
+			}
+		}
+		ringLen := len(servers)
 
 		torPortCnt := make(map[string][]int)
-		for _, server := range user.Servers {
+		for _, server := range servers {
 			// TODO: currently assume server used only one port
 
 			for _, connTo := range server.PortConnToMap {
@@ -77,10 +67,6 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 			return len(torPortCnt[tors[i]]) > len(torPortCnt[tors[j]])
 		})
 
-		for tor, ports := range torPortCnt {
-			logger.ActionLog.Warnf("Tor: %v, Ports: %v", tor, ports)
-		}
-
 		linkTraffics := user.GetTopKLinkTraffic("allreduce", 1, ringLen)
 
 		cur := linkTraffics[0]
@@ -99,23 +85,18 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 
 			if !findNext {
 				logger.ActionLog.Errorf("Cannot form a ring")
-				return "allreduce"
+				return ""
 			}
 
 			ring = append(ring, cur)
-			logger.ActionLog.Debugf("Server: %v", cur.Src)
 		}
 
 		// assume the ring starts at Link[i].src
 		for i := 0; i < ringLen; {
 			// always allocate server to the tor with the largest number of ports
 
-			for torName, ports := range torPortCnt {
-				logger.ActionLog.Debugf("Tor: %v, Ports: %v", torName, ports)
+			for _, ports := range torPortCnt {
 				for _, port := range ports {
-					for _, connTo := range user.ToRs[torName].PortConnToMap {
-						logger.ActionLog.Debugf("ConnTo: %v", connTo)
-					}
 
 					ocsOutPort := port
 
@@ -125,7 +106,6 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 					for _, connTo := range server.PortConnToMap {
 						ocsInPort := connTo.Port
 
-						logger.ActionLog.Debugf("Server: %v, connTo %v", server.Ip, connTo)
 						newInPort = append(newInPort, ocsInPort)
 						newOutPort = append(newOutPort, ocsOutPort)
 
@@ -145,24 +125,27 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 			Out_port: newOutPort,
 		}
 
-		logger.ActionLog.Infof("allreduce: %v", newConn)
-
 		user.OCSs["ocs_edge"].UpdateConn(newConn)
 
-		return "allreduce"
+		return "initAllReduce"
 	}
 
-	states["allreduce"] = &ocss_context.State{
-		// Note: Write triggers into a map[string]func(ctx context.Context) bool instead of using s.MonitorApp("allreduce", 1) inside the Triggers slice
-		Triggers: []func(ctx context.Context) bool{
-			MyTriggers["allreduce"],
-		},
-		Actions: []func() string{
-			MyActions["allreduce"],
-		},
+	states := make(map[string]*ocss_context.State)
 
+	states["initAllReduce"] = &ocss_context.State{
+		Triggers: []func(ctx context.Context, servers map[string]bool) bool{
+			MyTriggers["initAllReduce"],
+		},
+		Actions: []func(Servers map[string]bool) string{
+			MyActions["initAllReduce"],
+		},
 		InitState: true,
 	}
 
-	return states
+	stateMachine["allreduce"] = ocss_context.StateMachine{
+		States:  states,
+		Servers: make(map[string]bool),
+	}
+
+	return stateMachine
 }
