@@ -13,6 +13,11 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 
 	states := make(map[string]*ocss_context.State)
 	MyActions := make(map[string]func() string)
+	MyTriggers := make(map[string]func(ctx context.Context) bool)
+
+	MyTriggers["allreduce"] = func(ctx context.Context) bool {
+		return s.MonitorApp("allreduce", 1)(ctx)
+	}
 
 	// Right shift
 	MyActions["2ToR"] = func() string {
@@ -35,7 +40,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 		return "State1"
 	}
 
-	MyActions["AllReduce"] = func() string {
+	MyActions["allreduce"] = func() string {
 
 		newInPort := []int{}
 		newOutPort := []int{}
@@ -48,7 +53,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 
 			for _, connTo := range server.PortConnToMap {
 				// torName := connTo.Device
-				logger.ActionLog.Warnf("Server: %v, connTo: %v", server.Name, connTo)
+				logger.ActionLog.Debugf("Server: %v, connTo: %v", server.Name, connTo)
 				torName := server.ConnToR
 				if _, ok := torPortCnt[torName]; !ok {
 					for _, connTo := range user.ToRs[torName].PortConnToMap {
@@ -94,11 +99,11 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 
 			if !findNext {
 				logger.ActionLog.Errorf("Cannot form a ring")
-				return "State1"
+				return "allreduce"
 			}
 
 			ring = append(ring, cur)
-			logger.ActionLog.Warnf("Server: %v", cur.Src)
+			logger.ActionLog.Debugf("Server: %v", cur.Src)
 		}
 
 		// assume the ring starts at Link[i].src
@@ -106,10 +111,10 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 			// always allocate server to the tor with the largest number of ports
 
 			for torName, ports := range torPortCnt {
-				logger.ActionLog.Warnf("Tor: %v, Ports: %v", torName, ports)
+				logger.ActionLog.Debugf("Tor: %v, Ports: %v", torName, ports)
 				for _, port := range ports {
 					for _, connTo := range user.ToRs[torName].PortConnToMap {
-						logger.ActionLog.Warnf("ConnTo: %v", connTo)
+						logger.ActionLog.Debugf("ConnTo: %v", connTo)
 					}
 
 					ocsOutPort := port
@@ -120,7 +125,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 					for _, connTo := range server.PortConnToMap {
 						ocsInPort := connTo.Port
 
-						logger.ActionLog.Errorf("Server: %v, connTo %v", server.Ip, connTo)
+						logger.ActionLog.Debugf("Server: %v, connTo %v", server.Ip, connTo)
 						newInPort = append(newInPort, ocsInPort)
 						newOutPort = append(newOutPort, ocsOutPort)
 
@@ -140,50 +145,24 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*o
 			Out_port: newOutPort,
 		}
 
-		logger.ActionLog.Infof("State1: %v", newConn)
+		logger.ActionLog.Infof("allreduce: %v", newConn)
 
 		user.OCSs["ocs_edge"].UpdateConn(newConn)
 
-		return "State1"
+		return "allreduce"
 	}
 
-	states["State1"] = &ocss_context.State{
+	states["allreduce"] = &ocss_context.State{
+		// Note: Write triggers into a map[string]func(ctx context.Context) bool instead of using s.MonitorApp("allreduce", 1) inside the Triggers slice
 		Triggers: []func(ctx context.Context) bool{
-			s.MonitorApp("allreduce", 1),
+			MyTriggers["allreduce"],
 		},
 		Actions: []func() string{
-			MyActions["AllReduce"],
-			func() string {
-				return "State1"
-			},
+			MyActions["allreduce"],
 		},
 
 		InitState: true,
 	}
-
-	// states["State1"] = &ocss_context.State{
-	// 	Triggers: []func(ctx context.Context) bool{
-	// 		func(ctx context.Context) bool {
-	// 			ticker := time.NewTicker(30000 * time.Second)
-	// 			defer ticker.Stop()
-
-	// 			select {
-	// 			case <-ticker.C:
-	// 				return true
-	// 			case <-ctx.Done():
-	// 				return false
-	// 			}
-	// 		},
-	// 	},
-	// 	Actions: []func() string{
-	// 		MyActions["AllReduce"],
-	// 		func() string {
-	// 			return "State1"
-	// 		},
-	// 	},
-
-	// 	InitState: true,
-	// }
 
 	return states
 }

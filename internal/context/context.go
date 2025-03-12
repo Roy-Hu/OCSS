@@ -37,6 +37,7 @@ type OCSSContext struct {
 	UserView   *UserView
 	States     map[string]*State
 	IpToServer map[string]string
+	StateChan  chan string
 }
 
 type ConnServerInfo struct {
@@ -104,6 +105,7 @@ func Init() error {
 			Traffic: make(map[string]TrafficMatrix),
 		},
 		IpToServer: make(map[string]string),
+		StateChan:  make(chan string),
 	}
 
 	// Initialize servers

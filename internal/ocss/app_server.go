@@ -43,6 +43,12 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if _, ok := self.States[appId]; !ok {
+		logger.HttpLog.Warnf("App %s does not exist in states", appId)
+		http.Error(w, "App does not exist", http.StatusBadRequest)
+		return
+	}
+
 	// Decode the JSON payload
 	var payload map[string][]string
 	decoder := json.NewDecoder(r.Body)
@@ -61,22 +67,17 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 
 	app, exists := self.UserView.AppServer.Apps[appId]
 	if !exists {
-		logger.HttpLog.Debugf("Creating new app %v", appId)
 		app = &ocss_context.App{
-			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
 			AppId:             appId,
+			FinishedIter:      []chan int{},
+			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
+			MonitoredIter:     []bool{},
 		}
 		self.UserView.AppServer.Apps[appId] = app
 	} else if app.Iter != iterNum-1 {
 		logger.HttpLog.Errorf("Invalid iteration number: %v", iterNum)
 		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
 		return
-	}
-
-	for i, monitor := range app.MonitoredApp {
-		if monitor {
-			self.UserView.AppServer.Apps[appId].AppChan[i] <- true
-		}
 	}
 
 	app.Iter = iterNum
@@ -90,6 +91,10 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 			}
 			app.IterTrafficMatrix[iterNum][srcIp][dstIp] = 0
 		}
+	}
+
+	if !exists {
+		self.StateChan <- appId
 	}
 
 	w.WriteHeader(http.StatusOK)

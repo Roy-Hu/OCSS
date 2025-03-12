@@ -33,46 +33,24 @@ func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Co
 		user.AppServer.Apps[appId] = &ocss_context.App{
 			AppId:             appId,
 			FinishedIter:      []chan int{},
-			AppChan:           []chan bool{},
 			IterTrafficMatrix: make(map[int]ocss_context.TrafficMatrix),
-			MonitoredApp:      []bool{},
 			MonitoredIter:     []bool{},
 		}
 	}
 
-	i := len(user.AppServer.Apps[appId].AppChan)
-	user.AppServer.Apps[appId].MonitoredApp = append(user.AppServer.Apps[appId].MonitoredApp, true)
-	user.AppServer.Apps[appId].AppChan = append(user.AppServer.Apps[appId].AppChan, make(chan bool))
+	j := len(user.AppServer.Apps[appId].FinishedIter)
+	user.AppServer.Apps[appId].MonitoredIter = append(user.AppServer.Apps[appId].MonitoredIter, true)
+	user.AppServer.Apps[appId].FinishedIter = append(user.AppServer.Apps[appId].FinishedIter, make(chan int))
 
 	return func(ctx context.Context) bool {
 		for {
 			select {
 			case <-ctx.Done():
 				return false
-			case <-user.AppServer.Apps[appId].AppChan[i]:
-				user.AppServer.Apps[appId].MonitoredApp[i] = false
-
-				logger.StateLog.Debugf("State1: App %s started", appId)
-				if iter != 0 {
-					logger.StateLog.Debugf("State1: App %s started", appId)
-
-					j := len(user.AppServer.Apps[appId].FinishedIter)
-					user.AppServer.Apps[appId].MonitoredIter = append(user.AppServer.Apps[appId].MonitoredIter, true)
-					user.AppServer.Apps[appId].FinishedIter = append(user.AppServer.Apps[appId].FinishedIter, make(chan int))
-
-					for {
-						select {
-						case <-ctx.Done():
-							return false
-						case iter := <-user.AppServer.Apps[appId].FinishedIter[j]:
-							if iter > 0 {
-								logger.StateLog.Infof("App %s finished iter %d", appId, iter)
-								user.AppServer.Apps[appId].MonitoredIter[j] = false
-								return true
-							}
-						}
-					}
-				} else {
+			case iter := <-user.AppServer.Apps[appId].FinishedIter[j]:
+				if iter > 0 {
+					logger.StateLog.Infof("App %s finished iter %d", appId, iter)
+					user.AppServer.Apps[appId].MonitoredIter[j] = false
 					return true
 				}
 			}
@@ -144,42 +122,57 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 	self := ocss_context.GetSelf()
 
 	self.States = s.setupStates(self.UserView)
-	for stateName, state := range self.States {
-		if state.InitState {
-			wg.Add(1)
-			go func(initialStateName string, states map[string]*ocss_context.State) {
-				defer wg.Done()
-				currentStateName := initialStateName
-				for {
-					logger.StateLog.Infof("State [%s] is running", currentStateName)
-					currentState, exists := states[currentStateName]
-					if !exists {
-						logger.StateLog.Errorf("State [%s] does not exist", currentStateName)
-						break
+	logger.StateLog.Errorf("State Controller is starting with initial state")
+
+	wg.Add(1)
+	go func(ctx context.Context, wg *sync.WaitGroup) {
+		for {
+			select {
+			case initialStateName := <-self.StateChan:
+
+				wg.Add(1)
+				go func(initialStateName string, states map[string]*ocss_context.State) {
+					logger.StateLog.Errorf("State Controller is starting with initial state [%s]", initialStateName)
+					defer wg.Done()
+
+					state := states[initialStateName]
+					if state == nil {
+						logger.StateLog.Warnf("State [%s] does not exist", initialStateName)
+						return
 					}
 
-					nextState := s.runState(ctx, currentStateName, currentState)
-					logger.StateLog.Errorf("State [%s] transitioning to [%s]", currentStateName, nextState)
-
-					if nextState == "" {
-						break
-					}
-					// ocss_context.PrintFowardingRule()
-
-					s.Processor().UpdateForwardingTables()
-
-					// TODO
-					for _, server := range self.UserView.Servers {
-						logger.StateLog.Warnf("Server %v connected to %v", server.Name, server.ConnToR)
-						// for _, connTo := range server.PortConnToMap {
-						// 	logger.StateLog.Warnf("Server %v connected to %v", server.Name, connTo)
-						// 	break
-						// }
+					if !state.InitState {
+						logger.StateLog.Errorf("State [%s] is not an initial state", initialStateName)
+						return
 					}
 
-					currentStateName = nextState
-				}
-			}(stateName, self.States)
+					currentStateName := initialStateName
+					for {
+						logger.StateLog.Infof("State [%s] is running", currentStateName)
+						currentState, exists := states[currentStateName]
+						if !exists {
+							logger.StateLog.Errorf("State [%s] does not exist", currentStateName)
+							break
+						}
+
+						nextState := s.runState(ctx, currentStateName, currentState)
+						logger.StateLog.Errorf("State [%s] transitioning to [%s]", currentStateName, nextState)
+
+						if nextState == "" {
+							break
+						}
+
+						s.Processor().UpdateForwardingTables()
+
+						currentStateName = nextState
+					}
+				}(initialStateName, self.States)
+			case <-ctx.Done():
+				wg.Done()
+				return
+			}
 		}
-	}
+	}(ctx, wg)
+
+	logger.StateLog.Errorf("State Controller is running")
 }
