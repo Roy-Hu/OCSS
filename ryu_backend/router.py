@@ -152,14 +152,14 @@ class RDCController(ControllerBase):
         torid = int(kwargs['torid'])
 
         # Clear the event and send the flow stats request.
-        self.rdc_app.flow_stats_event.clear()
+        # self.rdc_app.flow_stats_event.clear()
         self.rdc_app.request_flow_stats(dpid)
         
-        # Wait for the flow stats reply handler to update the matrix.
-        if not self.rdc_app.flow_stats_event.wait(timeout=1.0):
-            # Timeout: no reply received within the expected period.
-            body = json.dumps({'error': 'Timeout waiting for flow stats update'})
-            return Response(content_type='application/json', body=body, status=500)        
+        # # Wait for the flow stats reply handler to update the matrix.
+        # if not self.rdc_app.flow_stats_event.wait(timeout=1.0):
+        #     # Timeout: no reply received within the expected period.
+        #     body = json.dumps({'error': 'Timeout waiting for flow stats update'})
+        #     return Response(content_type='application/json', body=body, status=500)        
 
         # Acquire the lock to safely read the shared traffic matrix.
         with self.rdc_app.lock:

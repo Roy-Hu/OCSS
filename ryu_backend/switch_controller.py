@@ -45,7 +45,7 @@ class RDC(app_manager.RyuApp):
         self.monitor_threads = {} # Key: dpid, Value: hub.spawn thread
         self.switchs = set()
         self.lock = hub.Semaphore()
-        self.flow_stats_event = hub.Event()
+        # self.flow_stats_events = hub.Event()
 
         self.tracked_cookie = 0x1000 
         self.untracked_cookie = 0x2000  
@@ -270,9 +270,9 @@ class RDC(app_manager.RyuApp):
                         
                         if self.traffic_matrix[dpid][torid][key] < byte_count:
                             logger.SwitchLog.error("Traffic Matrix: %d %d %s %s %d", dpid, torid, src_ip, dst_ip, byte_count)
-                        
-        self.flow_stats_event.set()
-
+  
+        #   self.flow_stats_event.set()
+  
     def build_packets(self, dpid, torid, forwardingTable, cmd, vlan = 10):
         logger.SwitchLog.info("Build Packets for Swiich %d", dpid)
         
