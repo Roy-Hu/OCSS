@@ -50,7 +50,7 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Decode the JSON payload
-	var payload map[string][]string
+	var payload []string
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&payload); err != nil {
 		logger.HttpLog.Errorf("Error decoding JSON payload: %v", err)
@@ -84,8 +84,8 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 	app.IterTrafficMatrix[iterNum] = make(ocss_context.TrafficMatrix)
 	app.Active = true
 
-	for srcIp, dstIps := range payload {
-		for _, dstIp := range dstIps {
+	for _, srcIp := range payload {
+		for _, dstIp := range payload {
 			if _, exists := app.IterTrafficMatrix[iterNum][srcIp]; !exists {
 				app.IterTrafficMatrix[iterNum][srcIp] = make(map[string]int)
 			}
