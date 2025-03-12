@@ -2,7 +2,6 @@ package context
 
 import (
 	"container/heap"
-	"context"
 )
 
 type UserView struct {
@@ -11,13 +10,6 @@ type UserView struct {
 	Servers   map[string]*Server
 	AppServer *AppServer
 	Traffic   map[string]TrafficMatrix
-}
-
-type State struct {
-	Triggers  []func(ctx context.Context) bool `yaml:"-"`
-	Actions   []func() string                  `yaml:"-"`
-	Vars      map[string]interface{}           `yaml:"-"`
-	InitState bool
 }
 
 func (u *UserView) FindToRByDeviceAndPort(device string, port int) *ToR {
