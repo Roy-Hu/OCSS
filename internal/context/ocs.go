@@ -13,6 +13,7 @@ type OCS struct {
 	Ports          []int
 }
 
+// TODO: Map is better
 type Connection struct {
 	In_port  []int
 	Out_port []int
@@ -36,7 +37,33 @@ func (o *OCS) UpdateConn(conn *Connection) {
 			o.PortServerConn[conn.Out_port[i]].Server = make(map[string]bool)
 		}
 	}
-	o.Conn = conn
+
+	for i := range len(o.Conn.In_port) {
+		o.PortServerConn[o.Conn.In_port[i]].Server[o.Name] = false
+		o.PortServerConn[o.Conn.Out_port[i]].Server[o.Name] = false
+	}
+
+	for i := range len(conn.In_port) {
+		for j := range len(o.Conn.In_port) {
+			if conn.In_port[i] == o.Conn.In_port[j] {
+				o.Conn.Out_port[j] = conn.Out_port[i]
+			}
+		}
+	}
+
+	cnts := make(map[int]int)
+
+	for i := range len(o.Conn.In_port) {
+		cnts[o.Conn.In_port[i]]++
+		cnts[o.Conn.Out_port[i]]++
+	}
+
+	for idx, cnt := range cnts {
+		if cnt != 1 {
+			logger.CtxLog.Errorf("OCS Port %d is used more than once in OCS %s", idx, o.Name)
+			return
+		}
+	}
 	o.Changed = true
 }
 
