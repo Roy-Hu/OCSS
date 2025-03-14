@@ -228,7 +228,7 @@ class RDC(app_manager.RyuApp):
         
         self.prev_stats[dpid] = {}
         self.traffic_matrix[dpid] = {}
-        
+
         self.switchs.add(dpid)
 
     def request_flow_stats(self, dpid):
