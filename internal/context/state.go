@@ -5,9 +5,12 @@ import (
 )
 
 type State struct {
-	Triggers []func(ctx context.Context, Servers map[string]bool) bool `yaml:"-"`
-	Actions  []func(Servers map[string]bool) string                    `yaml:"-"`
-	Vars     map[string]interface{}                                    `yaml:"-"`
+	Triggers []func(ctx context.Context, Servers map[string]bool) bool
+	Actions  []func(Servers map[string]bool) string
+	Vars     map[string]interface{}
+
+	Ctx    context.Context
+	Cancel context.CancelFunc
 
 	InitState bool
 }
@@ -23,4 +26,7 @@ type StateMachine struct {
 	States map[string]*State
 
 	Servers map[string]bool
+
+	Ctx    context.Context
+	Cancel context.CancelFunc
 }

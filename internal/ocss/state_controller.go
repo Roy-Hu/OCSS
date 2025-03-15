@@ -60,10 +60,6 @@ func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Co
 }
 
 func (s *StateController) runState(parentCtx context.Context, stateName string, stateMachine *ocss_context.StateMachine) string {
-	// Create a cancelable context derived from the parent context
-	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
-
 	fanIn := make(chan int)
 	var once sync.Once
 	var wg sync.WaitGroup
@@ -71,16 +67,20 @@ func (s *StateController) runState(parentCtx context.Context, stateName string, 
 	state := stateMachine.States[stateName]
 	servers := stateMachine.Servers
 
+	// Create a cancelable context derived from the parent context
+	state.Ctx, state.Cancel = context.WithCancel(parentCtx)
+	defer state.Cancel()
+
 	// Start a goroutine for each trigger
 	for i, triggerFunc := range state.Triggers {
 		wg.Add(1)
 		go func(index int, tf func(ctx context.Context, servers map[string]bool) bool, servers map[string]bool) {
 			defer wg.Done()
-			activated := tf(ctx, servers) // Pass the cancelable context
+			activated := tf(state.Ctx, servers) // Pass the cancelable context
 			if activated {
 				once.Do(func() {
 					fanIn <- index
-					cancel() // Cancel other triggers
+					state.Cancel() // Cancel other triggers
 				})
 			} else {
 				return
@@ -102,7 +102,7 @@ func (s *StateController) runState(parentCtx context.Context, stateName string, 
 			resultState = stateName
 		}
 
-	case <-ctx.Done():
+	case <-state.Ctx.Done():
 		// Context was canceled externally or by a trigger
 		logger.StateLog.Infof("State [%s] shutting down due to context cancellation", stateName)
 		resultState = ""
@@ -206,6 +206,12 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 					stateMachine := self.RunningAppStateMachines[appName][appStateIdx]
 
+					// Create an independent context for this state machine.
+					smCtx, smCancel := context.WithCancel(ctx)
+					// Optionally store smCtx and smCancel in your stateMachine struct if you need to cancel it later from another part of your program.
+					stateMachine.Ctx = smCtx
+					stateMachine.Cancel = smCancel
+
 					for stateName, state := range stateMachine.States {
 						if !state.InitState {
 							logger.StateLog.Debugf("State [%s] is not an initial state", appName)
@@ -214,7 +220,7 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 						go func(currentStateName string, stateMachine *ocss_context.StateMachine) {
 							for {
-								nextState := s.runState(ctx, currentStateName, stateMachine)
+								nextState := s.runState(stateMachine.Ctx, currentStateName, stateMachine)
 								logger.StateLog.Errorf("State [%s] transitioning to [%s]", currentStateName, nextState)
 
 								if nextState == "" {
