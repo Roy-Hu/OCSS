@@ -7,7 +7,6 @@ import (
 	ocss_context "github.com/comp590/ocss/internal/context"
 	"github.com/comp590/ocss/internal/logger"
 	"github.com/comp590/ocss/pkg/app"
-	"github.com/mitchellh/copystructure"
 )
 
 type StateControllerOCSS interface {
@@ -28,213 +27,245 @@ func NewStateController(ocss StateControllerOCSS) (*StateController, error) {
 	return s, nil
 }
 
-func (s *StateController) MonitorApp(appId string, iter int) func(ctx context.Context) bool {
-	user := ocss_context.GetSelf().UserView
-	if _, ok := user.AppServer.Apps[appId]; !ok {
-		user.AppServer.Apps[appId] = &ocss_context.App{
-			AppId:             appId,
-			FinishedIter:      []chan int{},
-			IterTrafficMatrix: make(map[int]*ocss_context.IterTraffic),
-			MonitoredIter:     []bool{},
+func matchOp(op1 *ocss_context.Operation, op2 *ocss_context.Operation) bool {
+	if op1.Op == op2.Op {
+		matchServer := make(map[string]bool)
+		for _, server := range op2.Servers {
+			matchServer[server] = true
 		}
-	}
 
-	j := len(user.AppServer.Apps[appId].FinishedIter)
-	user.AppServer.Apps[appId].MonitoredIter = append(user.AppServer.Apps[appId].MonitoredIter, true)
-	user.AppServer.Apps[appId].FinishedIter = append(user.AppServer.Apps[appId].FinishedIter, make(chan int))
-
-	return func(ctx context.Context) bool {
-		for {
-			select {
-			case <-ctx.Done():
-				return false
-			case recvIter := <-user.AppServer.Apps[appId].FinishedIter[j]:
-				if iter == recvIter {
-					logger.StateLog.Infof("App %s finished iter %d", appId, iter)
-					user.AppServer.Apps[appId].MonitoredIter[j] = false
-					return true
-				}
+		match := true
+		for _, server := range op1.Servers {
+			if _, ok := matchServer[server]; !ok {
+				match = false
+				break
 			}
 		}
+
+		return match
 	}
+
+	return false
 }
 
-func (s *StateController) runState(parentCtx context.Context, stateName string, stateMachine *ocss_context.StateMachine) string {
-	fanIn := make(chan int)
-	var once sync.Once
-	var wg sync.WaitGroup
+func (s *StateController) addOptoState(stateMachine *ocss_context.StateMachine, op *ocss_context.Operation) {
+	self := ocss_context.GetSelf()
 
-	state := stateMachine.States[stateName]
-	servers := stateMachine.Servers
+	curStateId := stateMachine.CurStateId
+	curTraffic := s.Processor().GetFlowTraffic(op.Servers)
 
-	// Create a cancelable context derived from the parent context
-	state.Ctx, state.Cancel = context.WithCancel(parentCtx)
-	defer state.Cancel()
+	if op.Status == ocss_context.START {
+		iterTraffic := ocss_context.IterTraffic{
+			Start: curTraffic,
+		}
 
-	// Start a goroutine for each trigger
-	for i, triggerFunc := range state.Triggers {
-		wg.Add(1)
-		go func(index int, tf func(ctx context.Context, servers map[string]bool) bool, servers map[string]bool) {
-			defer wg.Done()
-			activated := tf(state.Ctx, servers) // Pass the cancelable context
-			if activated {
-				once.Do(func() {
-					fanIn <- index
-					state.Cancel() // Cancel other triggers
+		op.IterTraffic = append(op.IterTraffic, iterTraffic)
+
+		if int(curStateId) < len(stateMachine.States) && stateMachine.States[curStateId].Status == ocss_context.RUNNING {
+			stateMachine.States[curStateId].OPs = append(stateMachine.States[curStateId].OPs, op)
+
+			stateMachine.States[curStateId-1].Triggers = append(stateMachine.States[curStateId].Triggers, op)
+			if policyFunc, ok := self.Policies[op.Op]; ok {
+				stateMachine.States[curStateId-1].Policies = append(stateMachine.States[curStateId-1].Policies, &ocss_context.Policy{
+					StateId:    curStateId,
+					PolicyFunc: policyFunc,
+					Servers:    op.Servers,
 				})
 			} else {
-				return
+				logger.StateLog.Warnf("No policy found for OP[%v]", op.Op)
 			}
-		}(i, triggerFunc, servers)
-	}
-
-	var resultState string
-
-	// Wait for the first trigger to activate or context cancellation
-	select {
-	case triggerIndex := <-fanIn:
-		logger.StateLog.Infof("State [%s] trigger [%d] activated", stateName, triggerIndex)
-		nxtStateName := state.Actions[triggerIndex](stateMachine.Servers)
-
-		if nxtStateName != stateName {
-			resultState = nxtStateName
 		} else {
-			resultState = stateName
+			id := stateMachine.GenerateStateId()
+			newState := &ocss_context.State{
+				Id:     id,
+				Status: ocss_context.RUNNING,
+				OPs:    []*ocss_context.Operation{op},
+			}
+
+			newState.Triggers = append(stateMachine.States[curStateId].Triggers, op)
+			if policyFunc, ok := self.Policies[op.Op]; ok {
+				stateMachine.States[curStateId].Policies = append(stateMachine.States[curStateId].Policies, &ocss_context.Policy{
+					StateId:    id,
+					PolicyFunc: policyFunc,
+					Servers:    op.Servers,
+				})
+			}
+
+			stateMachine.States = append(stateMachine.States, newState)
+			stateMachine.CurStateId = id
+		}
+	} else if op.Status == ocss_context.END {
+		for _, stateOp := range stateMachine.States[curStateId].OPs {
+			if matchOp(stateOp, op) {
+				stateOp.IterTraffic[stateMachine.IterNum-1].End = curTraffic
+				stateOp.CurTraffic = stateOp.IterTraffic[stateMachine.IterNum-1].GetIterTrafficMatrix()
+				stateOp.Status = ocss_context.END
+				break
+			}
 		}
 
-	case <-state.Ctx.Done():
-		// Context was canceled externally or by a trigger
-		logger.StateLog.Infof("State [%s] shutting down due to context cancellation", stateName)
-		resultState = ""
-	}
+		for _, stateOp := range stateMachine.States[curStateId].OPs {
+			if stateOp.Status != ocss_context.END {
+				return
+			}
+		}
 
-	// Wait for all goroutines to finish
-	wg.Wait()
-	return resultState
+		logger.StateLog.Infof("State[%v] is finished, transit", curStateId)
+		stateMachine.States[curStateId].Status = ocss_context.IDLE
+	} else {
+		logger.StateLog.Warnf("Invalid Status[%v] for Operation[%v]", op.Status, op.Op)
+	}
 }
 
-func addNewStateMachine(stateInfo *ocss_context.StateInfo) int {
-	self := ocss_context.GetSelf()
-	idx := -1
+func (s *StateController) stateTransition(stateMachine *ocss_context.StateMachine, op *ocss_context.Operation) {
+	curStateId := stateMachine.CurStateId
+	curState := stateMachine.States[curStateId]
 
-	logger.ActionLog.Infof("Adding new state machine for App[%v], Servers[%v]", stateInfo.Name, stateInfo.Servers)
-	if _, exists := self.RunningAppStateMachines[stateInfo.Name]; !exists {
+	curTraffic := s.Processor().GetFlowTraffic(op.Servers)
+	if op.Status == ocss_context.START {
+		runningOp := 0
+		for _, curOp := range curState.OPs {
+			if curOp.Status == ocss_context.START {
+				runningOp++
+			}
+		}
+
+		if runningOp > 1 {
+			logger.StateLog.Errorf("More than one operation is running which state transition is not supported yet")
+			return
+		}
+
+		for _, triggerOp := range curState.Triggers {
+			if matchOp(triggerOp, op) {
+				for _, policy := range curState.Policies {
+					if policy.StateId == curStateId {
+						policy.PolicyFunc(*op)
+					}
+				}
+
+				stateMachine.CurStateId = curStateId + 1
+
+				break
+			}
+		}
+
+		for _, stateOp := range stateMachine.States[stateMachine.CurStateId].OPs {
+			if matchOp(stateOp, op) {
+				if len(stateOp.IterTraffic) != stateMachine.IterNum-1 {
+					logger.StateLog.Errorf("Invalid Iter Traffic for APP[%v] Operation[%v] Server[%v]", stateMachine.App, op.Op, op.Servers)
+
+					return
+				}
+				iterTraffic := ocss_context.IterTraffic{
+					Start: curTraffic,
+				}
+
+				stateOp.IterTraffic = append(stateOp.IterTraffic, iterTraffic)
+				stateOp.Status = ocss_context.START
+
+				break
+			}
+		}
+	} else if op.Status == ocss_context.END {
+		for _, stateOp := range stateMachine.States[curStateId].OPs {
+			if matchOp(stateOp, op) {
+				if len(stateOp.IterTraffic) != stateMachine.IterNum {
+					logger.StateLog.Errorf("Invalid Iter Traffic for APP[%v] Operation[%v] Server[%v]", stateMachine.App, op.Op, op.Servers)
+					return
+				}
+				stateOp.IterTraffic[stateMachine.IterNum-1].End = curTraffic
+
+				stateOp.CurTraffic = stateOp.IterTraffic[stateMachine.IterNum-1].GetIterTrafficMatrix()
+				stateOp.Status = ocss_context.END
+				break
+			}
+		}
+
+	}
+}
+
+func addNewStateMachine(app string, op *ocss_context.Operation) {
+	self := ocss_context.GetSelf()
+
+	logger.ActionLog.Infof("Adding new state machine for App[%v], Op[%vsServers[%v]", app, op.Op, op.Servers)
+	if _, exists := self.RunningAppStateMachines[app]; !exists {
 		// Copy the servers slice into a new map.
-		servers := make(map[string]bool, len(stateInfo.Servers))
-		for _, server := range stateInfo.Servers {
+		servers := make(map[string]bool, len(op.Servers))
+		for _, server := range op.Servers {
 			servers[server] = true
 		}
 
-		// Use copystructure to deep copy each state.
-		states := make(map[string]*ocss_context.State)
-		for stateName, origState := range self.AppStateMachines[stateInfo.Name].States {
-			copied, err := copystructure.Copy(origState)
-			if err != nil {
-				logger.StateLog.Errorf("Error deep copying state %s: %v", stateName, err)
-				return idx
-			}
-
-			// Attempt type assertion.
-			newState, ok := copied.(*ocss_context.State)
-			if !ok {
-				// In case the copy returns a non-pointer type.
-				st, ok := copied.(ocss_context.State)
-				if !ok {
-					logger.StateLog.Errorf("Error asserting deep copied state type for %s", stateName)
-					return idx
-				}
-				newState = &st
-			}
-
-			states[stateName] = newState
-		}
-
 		// Create the new state machine with the deep-copied states and servers.
-		stateMachine := &ocss_context.StateMachine{
-			States:  states,
-			Servers: servers,
+		self.RunningAppStateMachines[app] = &ocss_context.StateMachine{
+			App:         app,
+			Servers:     servers,
+			CurStateId:  0,
+			IdGenerator: 0,
+			IterNum:     1,
 		}
 
-		self.RunningAppStateMachines[stateInfo.Name] = []*ocss_context.StateMachine{stateMachine}
-
-		idx = 0
-
+		initState := &ocss_context.State{
+			Id:     0,
+			Status: ocss_context.IDLE,
+		}
+		self.RunningAppStateMachines[app].States = append(self.RunningAppStateMachines[app].States, initState)
 	} else {
-		// TODO: merge to running state if there are common servers
+		// TODO: support multiple state machines for the same app
+		logger.ActionLog.Warnf("State machine already exists for App[%v]", app)
 	}
-
-	return idx
 }
 
 func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 	logger.StateLog.Info("State Controller is running")
 
+	self := ocss_context.GetSelf()
+
+	self.Policies = initPolicies(self.UserView)
+
 	wg.Add(1)
 	go func(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 
-		s.Processor().MonitorTraffic(ctx)
-	}(ctx, wg)
-
-	self := ocss_context.GetSelf()
-
-	self.AppStateMachines = s.setupStates(self.UserView)
-
-	wg.Add(1)
-	go func(ctx context.Context, wg *sync.WaitGroup) {
+		// We assume in each iteration of the app, the order of operation is fixed
 		for {
 			select {
-			case stateInfo := <-self.AppStateInfoChan:
+			case opInfo := <-self.OpInfoChan:
+				appName := opInfo.App
+				iter := opInfo.Iter
 
-				wg.Add(1)
-				go func(stateInfo *ocss_context.StateInfo, states map[string]ocss_context.StateMachine) {
-					appName := stateInfo.Name
+				op := &ocss_context.Operation{
+					Op:      opInfo.Op,
+					Servers: opInfo.Servers,
+					Status:  opInfo.Status,
+				}
 
-					logger.StateLog.Infof("State Controller is starting for App [%s]", appName)
-					defer wg.Done()
+				logger.StateLog.Infof("State Controller is starting for App [%s] Op[%s] Status [%v] Servers[%v]", appName, op.Op, op.Status, op.Servers)
 
-					if _, exists := states[appName]; !exists {
-						logger.StateLog.Errorf("State [%s] does not exist", appName)
+				if _, exists := self.RunningAppStateMachines[appName]; !exists {
+					if iter != 1 {
+						logger.ActionLog.Error("State Machines needs to be create in iter 1 for now")
 						return
 					}
 
-					appStateIdx := addNewStateMachine(stateInfo)
-					if appStateIdx == -1 {
-						logger.StateLog.Errorf("Fail to run state machine for [%s]", appName)
-						return
+					addNewStateMachine(appName, op)
+				}
+
+				stateMachine := self.RunningAppStateMachines[appName]
+				// Contruct the order of and states in iter 1
+				if opInfo.Iter == 1 {
+					s.addOptoState(stateMachine, op)
+				} else {
+					if stateMachine.IterNum != opInfo.Iter {
+						stateMachine.CurStateId = 0
 					}
 
-					stateMachine := self.RunningAppStateMachines[appName][appStateIdx]
+					stateMachine.IterNum = opInfo.Iter
 
-					// Create an independent context for this state machine.
-					smCtx, smCancel := context.WithCancel(ctx)
-					// Optionally store smCtx and smCancel in your stateMachine struct if you need to cancel it later from another part of your program.
-					stateMachine.Ctx = smCtx
-					stateMachine.Cancel = smCancel
+					s.stateTransition(stateMachine, op)
+				}
 
-					for stateName, state := range stateMachine.States {
-						if !state.InitState {
-							logger.StateLog.Debugf("State [%s] is not an initial state", appName)
-							continue
-						}
+				// stateMachine.PrintStateTimeLine()
 
-						go func(currentStateName string, stateMachine *ocss_context.StateMachine) {
-							for {
-								nextState := s.runState(stateMachine.Ctx, currentStateName, stateMachine)
-								logger.StateLog.Errorf("State [%s] transitioning to [%s]", currentStateName, nextState)
-
-								if nextState == "" {
-									break
-								}
-
-								s.Processor().UpdateForwardingTables()
-
-								currentStateName = nextState
-							}
-						}(stateName, stateMachine)
-					}
-
-				}(stateInfo, self.AppStateMachines)
 			case <-ctx.Done():
 				wg.Done()
 				return

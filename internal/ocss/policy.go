@@ -1,7 +1,6 @@
 package ocss
 
 import (
-	"context"
 	"sort"
 
 	ocss_context "github.com/comp590/ocss/internal/context"
@@ -9,28 +8,22 @@ import (
 	"github.com/comp590/ocss/internal/logger"
 )
 
-func (s *StateController) setupStates(user *ocss_context.UserView) map[string]ocss_context.StateMachine {
+func initPolicies(user *ocss_context.UserView) map[string]ocss_context.PolicyFunc {
 
-	// These Initialization is needed for the code to run
-	// Init start
-	stateMachine := make(map[string]ocss_context.StateMachine)
-
-	MyActions := make(map[string]func(Servers map[string]bool) string)
-	MyTriggers := make(map[string]func(ctx context.Context, servers map[string]bool) bool)
+	MyActions := make(map[string]ocss_context.PolicyFunc)
 	// Init end
 
-	MyTriggers["initAllReduce"] = func(ctx context.Context, servers map[string]bool) bool {
-		return s.MonitorApp("allreduce", 1)(ctx)
-	}
-
-	MyActions["initAllReduce"] = func(Servers map[string]bool) string {
-
+	MyActions["allreduce"] = ocss_context.PolicyFunc(func(op ocss_context.Operation) string {
 		newInPort := []int{}
 		newOutPort := []int{}
 
 		servers := make(map[string]*ocss_context.Server)
+		serverMap := make(map[string]bool)
+		for _, server := range op.Servers {
+			serverMap[server] = true
+		}
 
-		for server, ok := range Servers {
+		for server, ok := range serverMap {
 			if ok {
 				servers[server] = user.Servers[server]
 			}
@@ -67,7 +60,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]oc
 			return len(torPortCnt[tors[i]]) > len(torPortCnt[tors[j]])
 		})
 
-		linkTraffics := user.GetTopKLinkTraffic("allreduce", 1, ringLen)
+		linkTraffics := op.CurTraffic.GetTopKLinkTraffic(ringLen)
 
 		cur := linkTraffics[0]
 		ring := []ocss_context.TrafficPair{}
@@ -128,24 +121,7 @@ func (s *StateController) setupStates(user *ocss_context.UserView) map[string]oc
 		user.OCSs["ocs_edge"].UpdateConn(newConn)
 
 		return "initAllReduce"
-	}
+	})
 
-	states := make(map[string]*ocss_context.State)
-
-	states["initAllReduce"] = &ocss_context.State{
-		Triggers: []func(ctx context.Context, servers map[string]bool) bool{
-			MyTriggers["initAllReduce"],
-		},
-		Actions: []func(Servers map[string]bool) string{
-			MyActions["initAllReduce"],
-		},
-		InitState: true,
-	}
-
-	stateMachine["allreduce"] = ocss_context.StateMachine{
-		States:  states,
-		Servers: make(map[string]bool),
-	}
-
-	return stateMachine
+	return MyActions
 }

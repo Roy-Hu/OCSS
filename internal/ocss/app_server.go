@@ -35,17 +35,12 @@ func NewHttpServer(ocss HttpServerOCSS) (*HttpServer, error) {
 func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	appId := vars["appId"]
+	op := vars["op"]
 	iter := vars["iter"]
 	self := ocss_context.GetSelf()
 
 	if appId == "" {
 		http.Error(w, "appId is required in the URL", http.StatusBadRequest)
-		return
-	}
-
-	if _, ok := self.AppStateMachines[appId]; !ok {
-		logger.HttpLog.Warnf("App %s does not exist in states", appId)
-		http.Error(w, "App does not exist", http.StatusBadRequest)
 		return
 	}
 
@@ -65,62 +60,28 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	app, exists := self.UserView.AppServer.Apps[appId]
-	if !exists {
-		app = &ocss_context.App{
-			AppId:             appId,
-			FinishedIter:      []chan int{},
-			IterTrafficMatrix: make(map[int]*ocss_context.IterTraffic),
-			MonitoredIter:     []bool{},
-		}
-		self.UserView.AppServer.Apps[appId] = app
-	} else if app.Iter != iterNum-1 {
-		logger.HttpLog.Errorf("Invalid iteration number: %v", iterNum)
-		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
-		return
-	}
+	servers := make([]string, len(payload))
 
-	app.Iter = iterNum
-	app.IterTrafficMatrix[iterNum] = &ocss_context.IterTraffic{
-		Start: make(ocss_context.TrafficMatrix),
-		End:   make(ocss_context.TrafficMatrix),
-		Init:  true,
-	}
-
-	app.Active = true
-
-	for _, srcIp := range payload {
-		for _, dstIp := range payload {
-			if _, exists := app.IterTrafficMatrix[iterNum].Start[srcIp]; !exists {
-				app.IterTrafficMatrix[iterNum].Start[srcIp] = make(map[string]int)
-				app.IterTrafficMatrix[iterNum].End[srcIp] = make(map[string]int)
-			}
-			app.IterTrafficMatrix[iterNum].Start[srcIp][dstIp] = 0
-			app.IterTrafficMatrix[iterNum].End[srcIp][dstIp] = 0
-		}
-	}
-
-	if !exists {
-		servers := make([]string, len(payload))
-
-		for i, ips := range payload {
-			server := self.UserView.GetServerByIp(ips)
-			if server == "" {
-				logger.HttpLog.Errorf("Server not found for IP %s", ips)
-				http.Error(w, "Server not found", http.StatusBadRequest)
-				return
-			}
-
-			servers[i] = server
+	for i, ips := range payload {
+		server := ocss_context.GetServerByIp(ips)
+		if server == "" {
+			logger.HttpLog.Errorf("Server not found for IP %s", ips)
+			http.Error(w, "Server not found", http.StatusBadRequest)
+			return
 		}
 
-		stateInfo := &ocss_context.StateInfo{
-			Name:    appId,
-			Servers: servers,
-		}
-
-		self.AppStateInfoChan <- stateInfo
+		servers[i] = server
 	}
+
+	opInfo := &ocss_context.OpInfo{
+		App:     appId,
+		Op:      op,
+		Servers: servers,
+		Status:  ocss_context.START,
+		Iter:    iterNum,
+	}
+
+	self.OpInfoChan <- opInfo
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Start iter received successfully"))
@@ -130,10 +91,21 @@ func (s *HttpServer) HandlePostStartIter(w http.ResponseWriter, r *http.Request)
 func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	appId := vars["appId"]
+	op := vars["op"]
 	iter := vars["iter"]
 	self := ocss_context.GetSelf()
+
 	if appId == "" {
 		http.Error(w, "appId is required in the URL", http.StatusBadRequest)
+		return
+	}
+
+	// Decode the JSON payload
+	var payload []string
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&payload); err != nil {
+		logger.HttpLog.Errorf("Error decoding JSON payload: %v", err)
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
 
@@ -144,34 +116,28 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, exists := self.UserView.AppServer.Apps[appId]
-	if !exists {
-		logger.HttpLog.Errorf("App %v does not exist", appId)
-		http.Error(w, "App does not exist", http.StatusBadRequest)
-		return
-	}
+	servers := make([]string, len(payload))
 
-	if !app.Active {
-		logger.HttpLog.Errorf("App is not active")
-		http.Error(w, "App is not active", http.StatusBadRequest)
-		return
-	}
-
-	if app.Iter != iterNum {
-		logger.HttpLog.Errorf("Invalid iteration number: %v", iterNum)
-		http.Error(w, "Invalid iteration number", http.StatusBadRequest)
-		return
-	}
-
-	app.ConstructHeapMap()
-
-	for i, monitor := range app.MonitoredIter {
-		if monitor {
-			self.UserView.AppServer.Apps[appId].FinishedIter[i] <- iterNum
+	for i, ips := range payload {
+		server := ocss_context.GetServerByIp(ips)
+		if server == "" {
+			logger.HttpLog.Errorf("Server not found for IP %s", ips)
+			http.Error(w, "Server not found", http.StatusBadRequest)
+			return
 		}
+
+		servers[i] = server
 	}
 
-	app.Active = false
+	opInfo := &ocss_context.OpInfo{
+		App:     appId,
+		Op:      op,
+		Servers: servers,
+		Status:  ocss_context.END,
+		Iter:    iterNum,
+	}
+
+	self.OpInfoChan <- opInfo
 
 	logger.HttpLog.Infof("Finished iteration %v for app %v", iterNum, appId)
 	w.WriteHeader(http.StatusOK)
@@ -180,8 +146,8 @@ func (s *HttpServer) HandlePostEndIter(w http.ResponseWriter, r *http.Request) {
 
 // setupRoutes configures the HTTP routes using Gorilla Mux.
 func (s *HttpServer) setupRoutes(router *mux.Router) {
-	router.HandleFunc("/startiter/{appId}/{iter}", s.HandlePostStartIter).Methods("POST")
-	router.HandleFunc("/enditer/{appId}/{iter}", s.HandlePostEndIter).Methods("POST")
+	router.HandleFunc("/startiter/{appId}/{op}/{iter}", s.HandlePostStartIter).Methods("POST")
+	router.HandleFunc("/enditer/{appId}/{op}/{iter}", s.HandlePostEndIter).Methods("POST")
 }
 
 func (s *HttpServer) Start(ctx context.Context, wg *sync.WaitGroup) {
@@ -201,7 +167,7 @@ func (s *HttpServer) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 		// Create a new http.Server so we can manage graceful shutdown
 		srv := &http.Server{
-			Addr:    self.UserView.AppServer.Address,
+			Addr:    self.HttpServerAddr,
 			Handler: loggingMiddleware(router),
 		}
 

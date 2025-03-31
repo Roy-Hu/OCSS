@@ -30,16 +30,16 @@ const (
 )
 
 type OCSSContext struct {
-	Switches         map[string]*Switch
-	Servers          map[string]*Server
-	OCSs             map[string]*OCS
-	DeviceType       map[string]DeviceType
-	UserView         *UserView
-	IpToServer       map[string]string
-	AppStateInfoChan chan *StateInfo
-
-	// AppStateMachines contain the prototype of state machines
-	AppStateMachines map[string]StateMachine
+	Switches       map[string]*Switch
+	Servers        map[string]*Server
+	OCSs           map[string]*OCS
+	DeviceType     map[string]DeviceType
+	UserView       *UserView
+	IpToServer     map[string]string
+	OpInfoChan     chan *OpInfo
+	HttpServerAddr string
+	// Policies contain the prototype of Policy Function for each operation
+	Policies map[string]PolicyFunc
 
 	// RunningAppStateMachines contain the running state machines
 	// each of the state machines is a copy of the prototype
@@ -47,7 +47,7 @@ type OCSSContext struct {
 
 	// So for the same App, there can be multiple state machines
 	// each of them is for a different set of servers
-	RunningAppStateMachines map[string][]*StateMachine
+	RunningAppStateMachines map[string]*StateMachine
 }
 
 type ConnServerInfo struct {
@@ -85,17 +85,6 @@ type Link struct {
 	DestPort    int
 }
 
-type ThresholdEvent struct {
-	ToR            string
-	SurpassedValue int
-	ThresholdValue int
-}
-
-type ThresholdKey struct {
-	ToR            string
-	ThresholdValue int
-}
-
 func Init() error {
 	configuration := factory.OcssConfig.Configuration
 
@@ -108,16 +97,13 @@ func Init() error {
 			OCSs:    make(map[string]*OCS),
 			ToRs:    make(map[string]*ToR),
 			Servers: make(map[string]*Server),
-			AppServer: &AppServer{
-				Apps:    make(map[string]*App),
-				Address: configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port),
-			},
 			Traffic: make(map[string]TrafficMatrix),
 		},
+		HttpServerAddr:          configuration.NetworkManager.AppServer.IP + ":" + strconv.Itoa(configuration.NetworkManager.AppServer.Port),
 		IpToServer:              make(map[string]string),
-		AppStateInfoChan:        make(chan *StateInfo),
-		AppStateMachines:        make(map[string]StateMachine),
-		RunningAppStateMachines: make(map[string][]*StateMachine),
+		OpInfoChan:              make(chan *OpInfo),
+		Policies:                make(map[string]PolicyFunc),
+		RunningAppStateMachines: make(map[string]*StateMachine),
 	}
 
 	// Initialize servers
@@ -536,4 +522,13 @@ func (c *ConnServerInfo) AddConnServerInfo(src *ConnServerInfo) {
 			c.Server[server] = true
 		}
 	}
+}
+
+func GetServerByIp(ip string) string {
+	self := GetSelf()
+	if server, ok := self.IpToServer[ip]; ok {
+		return server
+	}
+
+	return ""
 }
