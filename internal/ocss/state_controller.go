@@ -267,7 +267,7 @@ func (s *StateController) Start(ctx context.Context, wg *sync.WaitGroup) {
 				// stateMachine.PrintStateTimeLine()
 
 			case <-ctx.Done():
-				wg.Done()
+				logger.StateLog.Info("State Controller is stopping")
 				return
 			}
 		}
