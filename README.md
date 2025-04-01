@@ -71,16 +71,10 @@ If the above steps don’t resolve the issue, reboot the server:
 ```bash
 reboot
 ```
-- Login details (if prompted):
-  - **User:** `root`
-  - **Password:** `,l;'
-
 ---
 
 ## **Main code**
 The repository is structured into three main components: State, System, and Ryu.
-
- - State: state.go is where users can implement state-based algorithms to manage actions on the optical switch. The state_controller.go automatically monitors triggers defined by the switch, performs the corresponding actions, and handles state transitions.
 
  - Ryu: Located in the ryu_backend, this component contains the code responsible for managing forwarding rules and handling ocs connection changes.
 
@@ -92,14 +86,6 @@ The repository is structured into three main components: State, System, and Ryu.
 This folder defines the data structures used in the system and state. It also contains the shared data structure `OCSSContext`, which facilitates communication between the state and the system.
 
 ### internal/ocss
-Currently, this folder contains both the **State** and **System** components. It may be beneficial to create a separate folder for the **State** in the future.
-
-- **`state.go`**  
-  The file where users implement their state-based algorithms.
-
-**`state_controller.go`**  
-  Manages states by detecting triggers, performing corresponding actions, handling state transitions, and checking whether traffic exceeds defined thresholds.
-
 - **`process.go`**  
   Represents the system, responsible for creating, updating, and deleting forwarding rules based on configurations and state actions.
 
@@ -114,116 +100,8 @@ Contains the library for OpenFlow and OCS, used to directly configure switches. 
 
 - **switch_controller.py**  
   Manages the setup of forwarding rules and OCS connections.
-  
-### **Example case**
-We will use a simple example where there are 2 ToR, one optical switch, and two servers, and a simple state illustate how the whole sytstem works.
-
-The topology looks like
-
-Server1 <-> Packet Switch <-> Edge OCS <-> ToR A <-> Core OCS <-> ToR B <-> Edge OCS <-> Packet Switch <-> Server 2
-### **State(state.go)**
-Here is the state that the user should provide, it right shift the connection in optical switch every 0.5 sec, return the same state if the traffic exceed the threshold
-```go
-func (s *StateController) setupStates(user *ocss_context.UserView) map[string]*ocss_context.State {
-	MyActions["2ToR"] = func() string {
-		newConn := &ocss_context.Connection{
-			In_port:  user.OCSs["ocs_edge"].Conn.In_port,
-			Out_port: user.OCSs["ocs_edge"].Conn.Out_port,
-		}
-
-		first_out_port := user.OCSs["ocs_edge"].Conn.Out_port[0]
-
-		for i := 0; i < len(user.OCSs["ocs_edge"].Conn.Out_port)-1; i++ {
-			newConn.Out_port[i] = user.OCSs["ocs_edge"].Conn.Out_port[i+1]
-		}
-
-		newConn.Out_port[len(user.OCSs["ocs_edge"].Conn.Out_port)-1] = first_out_port
-
-		logger.ActionLog.Infof("State1: %v", newConn)
-		user.OCSs["ocs_edge"].UpdateConn(newConn)
-
-		return "State1"
-	}
-   initThreshold := 10000
-
-   states["State1"] = &ocss_context.State{
-   Triggers: []func(ctx context.Context) bool{
-      func(ctx context.Context) bool {
-         ticker := time.NewTicker(500 * time.Millisecond)
-         defer ticker.Stop()
-
-         select {
-         case <-ticker.C:
-            return true
-         case <-ctx.Done():
-            return false
-         }
-      },
-      createThresholdTrigger("tor1", initThreshold),
-   },
-   Actions: []func() string{
-      MyActions["2ToR"],
-      func() string {
-         threshold := states["State1"].Vars["threshold"].(int)
-         threshold *= 2
-         states["State1"].Vars["threshold"] = threshold
-
-         states["State1"].Triggers[1] = createThresholdTrigger("tor1", states["State1"].Vars["threshold"].(int))
-         return "State1"
-      },
-   },
-   Vars: map[string]interface{}{
-      "threshold": initThreshold,
-   },
-
-   InitState: true,
-}
-```
 
 #### How It Works
-
-1. **`user` Variable**  
-   - `setupStates` receives a `user *ocss_context.UserView`, providing information about the network topology and hardware state.
-
-2. **Triggers**  
-   - **Timer Trigger**: Fires every 0.5 seconds via a `Ticker`. If `<-ticker.C` is received, it returns `true`; if `<-ctx.Done()` is received (usally caused by program terminated or other trigger is triggered first), it returns `false`.  
-   - **Traffic Threshold Trigger**: Created by a pre-defined function `createThresholdTrigger("tor1", initThreshold)`. It return while traffic on `tor1` exceeds `initThreshold`.
-
-3. **Actions**  
-   - **`MyActions["2ToR"]`**: Rotates the optical switch ports by shifting the output port array, calls `user.OCSs["ocs_edge"].UpdateConn(newConn)` to apply the change, and returns `"State1"`.  
-   - **Threshold-Doubling**: If the threshold trigger fires, the second action doubles the current threshold and updates the trigger.
-
-4. **`Vars` Map**  
-   - Persists variables within the state. Here, `threshold` is tracked and updated as traffic conditions change.
-  
-5. **State Transition** 
-   - Both actions return "State1", so the state machine remains in State1. You could return a different state name if you wanted to transition elsewhere.
-
-### **State Controller(state_controller.go)**
-
-The State Controller manages trigger monitoring, performs corresponding actions, and orchestrates state transitions.
-
-#### Workflow
-
-1. **Thread Creation in `Start`**  
-   - Within the `Start` function, a new thread is created for each defined state.  
-   - It runs an infinite loop, waiting for `runState` to return the name of the next state to transition to.
-
-2. **Trigger Threads in `runState`**  
-   - `runState` creates a new thread for each trigger function.  
-   - If one trigger returns `true`, indicating it has been activated, `cancel()` is called to terminate any other trigger threads for that state.  
-   - The corresponding action is performed, and `runState` returns the next state name.
-
-3. **Transition & Forwarding Table Update**  
-   - When `runState` returns the next state, the loop in `Start` continues.  
-   - Typically, the user-defined action modifies the OCS connection.  
-   - The system then updates the forwarding tables in the ToR using `s.Processor().UpdateForwardingTables()`.  
-   - Finally, it transitions to the next state and repeats the process.
-
-#### Traffic monitoring
-Currently, the system is responsible for periodically pulling real-time traffic data from the switch. However, the state controller still relies on the method `subscribeToThreshold(self *ocss_context.OCSSContext, tor string, val int)` to create a channel between the system and the state controller(`dispatchThresholdEvents`). This channel is used to notify the state controller when the traffic exceeds the defined threshold.
-
-At present, the system requires a dedicated thread to run `dispatchThresholdEvents`, which continuously checks the traffic and threshold values to notify the trigger. This approach might be unnecessary, as a more straightforward solution would involve the system directly notification the trigger without relying on dispatchThresholdEvents for this purpose.
 
  ### **System (processor.go)**
 
