@@ -69,7 +69,7 @@ type Server struct {
 	Name          string
 	Ip            string
 	PortConnToMap map[int]*ConnectedTo
-	ConnToR       string
+	ConnToRPort   *ConnectedTo
 }
 
 type ConnectedTo struct {

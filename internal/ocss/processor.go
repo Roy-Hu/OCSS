@@ -79,15 +79,19 @@ func setOcsNxtSwitch(ocs *ocss_context.OCS, ocs_in_port int) error {
 func setToRForSever(tor *ocss_context.ToR) {
 	self := ocss_context.GetSelf()
 
-	for _, connInfo := range tor.PortServerConn {
+	for torPort, connInfo := range tor.PortServerConn {
 		for server, ok := range connInfo.Server {
 			if ok {
-				self.UserView.Servers[server].ConnToR = tor.Name
+				self.UserView.Servers[server].ConnToRPort = &ocss_context.ConnectedTo{
+					Device: tor.Device,
+					Name:   tor.Name,
+					Port:   torPort,
+				}
 			}
 		}
 	}
-
 }
+
 func (p *Processor) CreateForwardingTables() error {
 	self := ocss_context.GetSelf()
 	ocs_finished_setup := make(map[string]bool)

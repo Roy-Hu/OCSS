@@ -56,14 +56,15 @@ func (t TrafficMatrix) GetTopKLinkTraffic(k int) []TrafficPair {
 	var pq PriorityQueue
 	heap.Init(&pq)
 
-	for srcIp, TrafficMatrix := range t {
-		for dstIp, traffic := range TrafficMatrix {
-			src := GetServerByIp(srcIp)
-			dst := GetServerByIp(dstIp)
+	for srcServer, TrafficMatrix := range t {
+		for dstServer, traffic := range TrafficMatrix {
+			if srcServer == dstServer {
+				continue
+			}
 
 			item := &TrafficPair{
-				Src:     src,
-				Dst:     dst,
+				Src:     srcServer,
+				Dst:     dstServer,
 				Traffic: traffic,
 			}
 
